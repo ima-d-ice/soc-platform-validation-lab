@@ -12,8 +12,7 @@
 #include "soc_regs.h"
 
 /* Reset values (must match docs/soc-spec.md + configs/regs.yaml). */
-static uint32_t s_uart_ctrl = 0x00000000;
-static uint32_t s_uart_bauddiv = 0x00000000;
+static uint32_t s_uart_ctrl = 0x00000000;static uint32_t s_uart_bauddiv = 0x00000000;
 static uint32_t s_uart_txdata = 0x00000000;
 static uint32_t s_uart_rxdata = 0x00000000;
 /* STATUS is derived: TX_EMPTY=1 when idle. RX_VALID tracked via flag. */
@@ -68,8 +67,20 @@ uint32_t vlab_mmio_read(uint32_t addr) {
             return s_intc_enable;
         case VLAB_INTC_PENDING:
             return s_intc_pending;
-        case VLAB_INTC_ACK:
-            return 0xFFFFFFFFU; /* nothing pending on host shim */
+        case VLAB_INTC_ACK: {
+            /* Host INTC emulation: highest pending+enabled line in fixed
+             * priority order (TIMER > DMA > UART, mirroring the Python
+             * model). Read-to-ack: clears PENDING, sets ACTIVE. */
+            uint32_t gated = s_intc_pending & s_intc_enable;
+            uint32_t line = 0xFFFFFFFFU;
+            if (gated & (1U << 1)) line = 1U;
+            else if (gated & (1U << 2)) line = 2U;
+            else if (gated & (1U << 0)) line = 0U;
+            if (line == 0xFFFFFFFFU) return 0xFFFFFFFFU;
+            s_intc_pending &= ~(1U << line);
+            s_intc_active |= (1U << line);
+            return line;
+        }
         case VLAB_INTC_ACTIVE:
             return s_intc_active;
         case VLAB_PERF_CYCLES:
@@ -125,9 +136,17 @@ void vlab_mmio_write(uint32_t addr, uint32_t val) {
             s_dma_len = val;
             break;
         case VLAB_DMA_CTRL:
-            s_dma_ctrl = val & ~0x1U; /* START self-clears on host shim */
+            /* START self-clears; a fresh transfer sets BUSY and clears any
+             * sticky DONE/ERROR (mirrors Dma._start). */
+            if (val & 0x1U) {
+                s_dma_status = 0x1U; /* BUSY */
+                s_dma_err = 0;
+            }
+            s_dma_ctrl = val & ~0x1U;
             break;
         case VLAB_DMA_IRQ_CLEAR:
+            /* Shim simplification: clears BUSY too (no engine runs here;
+             * real completion/error paths set flags via test hooks). */
             s_dma_status = 0;
             s_dma_err = 0;
             break;
@@ -168,3 +187,20 @@ void vlab_mmio_write(uint32_t addr, uint32_t val) {
 
 /* Internal helper used by uart driver shim to consume RX_VALID. */
 void vlab_mmio_consume_rx(void) { s_uart_rx_valid = 0; }
+
+/* Test hooks (tests only): drive engine/IRQ events the host has no
+ * hardware for, so ISR dispatch paths execute for real. */
+void vlab_test_raise_irq(uint32_t line) {
+    if (line < 3U) s_intc_pending |= (1U << line);
+}
+
+void vlab_test_dma_complete(void) {
+    s_dma_status = 0x2U; /* DONE */
+    if (s_dma_ctrl & 0x2U) s_intc_pending |= (1U << 2); /* IRQ iff enabled */
+}
+
+void vlab_test_dma_error(uint32_t code) {
+    s_dma_status = 0x4U; /* ERROR */
+    s_dma_err = code;
+    if (s_dma_ctrl & 0x2U) s_intc_pending |= (1U << 2); /* IRQ iff enabled */
+}

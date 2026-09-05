@@ -19,6 +19,7 @@ add_library(vlab_drivers STATIC
   drivers/timer.c
   drivers/intc.c
   drivers/dma.c
+  isr/isr.c
   boot/boot.c
 )
 target_include_directories(vlab_drivers PUBLIC include)
@@ -40,3 +41,7 @@ add_test(NAME hal_unit COMMAND test_hal)
 add_executable(test_drivers tests/test_drivers.c)
 target_link_libraries(test_drivers PRIVATE vlab_drivers)
 add_test(NAME drivers_unit COMMAND test_drivers)
+
+add_executable(test_isr tests/test_isr.c)
+target_link_libraries(test_isr PRIVATE vlab_drivers)
+add_test(NAME isr_unit COMMAND test_isr)
