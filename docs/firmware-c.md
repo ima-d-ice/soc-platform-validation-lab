@@ -12,7 +12,7 @@ framework, boot sequencing, an event-driven demo app, and CTest unit tests
   `irq_disable/restore` critical-section structure. All drivers use it;
   nothing touches `vlab_mmio_*` outside HAL/mmio.
 * **Driver logic**: validation ordering (BUSY→LEN→ALIGN→ADDR, mirroring the
-  Python golden model), bit composition, W1C handling, error codes,
+  `soc_c` model), bit composition, W1C handling, error codes,
   bounded poll loops with timeout returns.
 * **ISR discipline**: vector table + registration (`isr/isr.c`), volatile
   ISR/main shared flags, critical sections around submit/recover state
@@ -28,16 +28,21 @@ framework, boot sequencing, an event-driven demo app, and CTest unit tests
 
 ## What is host behavior (stated, not hidden)
 
-* **Registers** are a static-table shim (`drivers/mmio.c`), not silicon.
-  It faithfully mirrors reset values, W1C, START-self-clear, and fixed
-  INTC priority so driver logic is genuinely exercised.
+* **Registers, two levels**: pure-logic unit tests use a static-table
+  shim (`drivers/mmio.c`), not silicon. It faithfully mirrors reset
+  values, W1C, START-self-clear, and fixed INTC priority so driver logic
+  is genuinely exercised. System tests (`soc_c_firmware_link`) skip the
+  shim: `soc_c/host_bridge` routes HAL traffic into the live ticking
+  `soc_c` engine (UART latency, timer countdown, DMA bursts, IRQ
+  coalescing), stepped explicitly.
 * **IRQs are dispatched, not preemptive**: host code calls
   `isr_dispatch()`; on silicon the same handlers would sit in the vector
   table. Volatile/critical-section/ordering code is identical either way.
-* **Engine stand-ins**: the host has no ticking DMA engine, so tests and
-  the demo drive completion/error via `vlab_test_*` hooks (documented as
-  test-only in `driver_api.h`). Timeout waits are bounded poll loops; on
-  silicon the bound would be a timer.
+* **Engine stand-ins (unit tests only)**: the shim has no ticking engine,
+  so unit tests and the demo drive completion/error via `vlab_test_*`
+  hooks (documented as test-only in `driver_api.h`). System tests drive
+  the real `soc_c` engine instead. Timeout waits are bounded poll loops;
+  on silicon the bound would be a timer.
 * **No silicon timing**: C tests assert logic and sequencing, never cycles.
 
 ## Interview map

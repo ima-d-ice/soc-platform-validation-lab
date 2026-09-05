@@ -1,6 +1,6 @@
 # Limitations (virtual-model honesty statement)
 
-This is a host-native behavioral virtual SoC written in Python/C. It is
+This is a host-native behavioral virtual SoC written in C. It is
 useful for firmware structure, driver sequencing, validation methodology,
 and *relative* reasoning inside one consistent timing model. It is not a
 performance oracle for any physical system.
@@ -23,18 +23,15 @@ performance oracle for any physical system.
    matrix yet (branch unit-tested only).
 6. **Capacity bounds.** 64KB SRAM caps single transfers at 16KB; 64KB
    transfers are refused by a fit check rather than worked around.
-7. **Scope bounds.** No Linux yet, no new peripherals, no RTL —
-   deliberate; the studied surface is platform software + validation.
-8. **RTOS is modeled, not ported.** `rtos/` implements FreeRTOS *scheduling
-   semantics* on model ticks; it is not the FreeRTOS kernel, has no SysTick
-   hardware, no ISR-driven preemption, no priority inheritance, and charges
-   zero ticks per context switch. Relative scheduling comparisons inside
-   the model are valid; absolute latency claims are not.
-9. **Linux layer is userspace, not kernel.** `linux/` never runs in kernel
-   mode, uses no syscalls/headers, has no IOMMU, caches, or concurrent bus
-   masters. It validates driver *structure* (layering, completion paths,
-   error handling) and relative tradeoffs, not kernel performance.
-10. **Single DMA channel.** Pipelining is descriptor queueing, not overlapped
-   transfers; ring depth absorbs producer bursts but cannot overlap engine
-   time. The 32KB driver arena caps 16KB rows to two buffers (documented
-   in the JSON-driving code and visible as flat queue-depth lines).
+7. **Scope bounds.** No RTOS/Linux models (removed in the pure-C
+   migration; prior Python-era studies remain in git history), no new
+   peripherals, no RTL — deliberate; the studied surface is platform
+   software + validation.
+8. **No RTOS port.** There is deliberately no POSIX/FreeRTOS port: a
+   wall-clock port would break run-to-run determinism, which every CTest
+   in this repo guarantees.
+9. **No Linux layer.** There is no kernel or userspace Linux driver
+   model in this tree.
+10. **Single DMA channel.** No overlapped transfers. The `soc_c_cpu_vs_dma`
+    bench uses SRC @+0x0000 / DST @+0x8000 inside 64KB SRAM, capping
+    single transfers at 16KB.

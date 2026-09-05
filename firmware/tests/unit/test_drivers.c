@@ -1,7 +1,7 @@
 /* Driver unit tests: validation ordering, error codes, register effects.
  *
- * Runs against the host MMIO shim with the same soc_regs.h the Python
- * golden model uses. Cases reset the registers they touch so order does
+ * Runs against the host MMIO shim with the same soc_regs.h the soc_c
+ * model uses. Cases reset the registers they touch so order does
  * not matter.
  */
 #include <assert.h>

@@ -4,8 +4,8 @@
  * are backed by a small static table initialised to reset values from
  * docs/soc-spec.md, so driver logic (bit manipulation, sequencing, error
  * checks) can be compiled and unit-tested with the SAME soc_regs.h header
- * used by the Python golden model. System behaviour (timing, IRQs, DMA
- * movement) is modelled in soc/ and validated by validation/.
+ * used by the soc_c model. System behaviour (timing, IRQs, DMA
+ * movement) is modelled in soc_c/ and validated by soc_c/tests/.
  */
 #include <stdint.h>
 
@@ -69,7 +69,7 @@ uint32_t vlab_mmio_read(uint32_t addr) {
             return s_intc_pending;
         case VLAB_INTC_ACK: {
             /* Host INTC emulation: highest pending+enabled line in fixed
-             * priority order (TIMER > DMA > UART, mirroring the Python
+             * priority order (TIMER > DMA > UART, mirroring the soc_c
              * model). Read-to-ack: clears PENDING, sets ACTIVE. */
             uint32_t gated = s_intc_pending & s_intc_enable;
             uint32_t line = 0xFFFFFFFFU;
@@ -181,7 +181,7 @@ void vlab_mmio_write(uint32_t addr, uint32_t val) {
         default:
             break;
     }
-    /* Host shim: reading RXDATA clears RX_VALID (mirrors Python model). */
+    /* Host shim: reading RXDATA clears RX_VALID (mirrors soc_c model). */
     (void)0;
 }
 

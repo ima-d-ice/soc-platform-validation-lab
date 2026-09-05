@@ -21,5 +21,8 @@ results/*
 *.swp
 *.swo
 
+# Private local notes (never commit)
+docs/interview-prep.md
+
 # Tooling
 *.log

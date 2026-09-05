@@ -6,7 +6,7 @@
  * firmware/platforms/vlab/) supplies the concrete DmaCaps; CURRENT VLAB
  * IMPLEMENTATION is SRAM-only, 4-byte aligned, 16KB max.
  *
- * Error split (mirrors soc/dma_caps.py): invalid driver-API use
+ * Error split (mirrors soc_c DMA validation): invalid driver-API use
  * (bad length multiple, misaligned, unmapped/overflowing address) is
  * reported with the classic codes; mapped-but-unsupported endpoints,
  * directions, or over-max lengths report DMA_ERR_UNSUPPORTED, i.e.

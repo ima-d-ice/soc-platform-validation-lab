@@ -6,10 +6,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_compile_options(-Wall -Wextra -Werror)
 
-# soc_regs.h is generated; ensure it exists before configuring.
+# soc_regs.h is frozen in-tree; ensure it exists before configuring.
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/soc_regs.h")
   message(FATAL_ERROR
-    "Missing include/soc_regs.h. Run: python3 tools/reggen.py from repo root.")
+    "Missing include/soc_regs.h (frozen spec header, do not hand-edit).")
 endif()
 
 add_library(vlab_drivers STATIC

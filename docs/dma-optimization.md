@@ -1,11 +1,11 @@
 # DMA Data-Path Optimization Study (Phase 4)
 
-Controlled experiments **within the virtual SoC timing model** (`configs/base.yaml`).
+Controlled experiments **within the virtual SoC timing model** (default
+config mirrors `configs/base.yaml`).
 Nothing here describes ARM hardware, MCU DMA timing, silicon, bus bandwidth,
-or real interrupt latency. All numbers below were measured by running
-`benchmarks/cpu_vs_dma.py` against the behavioral model; plots in
-`results/plots/` are rendered from `results/cpu_vs_dma_phase4.json`
-(both gitignored, reproducible via the command in Methodology).
+or real interrupt latency. All numbers below are produced by
+`soc_c_cpu_vs_dma` against the behavioral C model; the transfer-tick
+tables are verified identical by the `soc_c_dma_burst` CTest.
 
 ## Experiment questions
 
@@ -17,20 +17,20 @@ or real interrupt latency. All numbers below were measured by running
 
 ## Model assumptions
 
-* Tick-stepped behavioral model; `cpu_frequency_mhz: 100` converts ticks to ns
-  for reporting only.
-* CPU copy: word loop of `soc.read` + `soc.write` + `step(1 + ram_latency_ticks)`.
-  With `ram_latency_ticks: 2` this is **3 ticks/word** — a modeling choice, not
-  a hardware measurement.
-* DMA timing formula (preserved from Step 2, documented — not replaced):
+* Tick-stepped behavioral C model; `cpu_frequency_mhz: 100` converts ticks
+  to ns for reporting only.
+* CPU copy: 3 ticks/word — a modeling choice, not a hardware measurement
+  (the C bench charges `words * 3`; the archived Python harness modeled it
+  as `soc_read` + `soc_write` + `step(1 + ram_latency_ticks)` with
+  `ram_latency_ticks: 2`).
+* DMA timing formula (preserved, documented — not replaced):
   `words = LEN/4; bursts = ceil(words/burst);`
   `ticks = words * dma_latency_per_word_ticks + (bursts - 1) * 1`.
   Burst size is config-only (`dma_burst`); there is no BURST register.
 * MMIO setup/ACK bus accesses are combinational in this model (zero ticks,
   counted in MEM_ACC, not in tick totals).
-* SRAM is 64KB; regions are SRC @+0x0000, CPU_DST @+0x4000, DMA_DST @+0x8000.
-  Single transfers are therefore capped at 16KB; 64KB was requested but does
-  not fit and was not run.
+* SRAM is 64KB; the C bench uses SRC @+0x0000, DST @+0x8000.
+  Single transfers are therefore capped at 16KB.
 
 ## What is measured / derived / modeled
 
@@ -43,18 +43,14 @@ or real interrupt latency. All numbers below were measured by running
 ## Benchmark methodology
 
 ```bash
-python3 benchmarks/cpu_vs_dma.py \
-  --config configs/base.yaml \
-  --sizes 16,64,256,1024,4096,16384 \
-  --bursts 1,2,4,8,16 \
-  --completion both \
-  --reps 5 \
-  --out results/cpu_vs_dma_phase4.json
-python3 tools/plot_dma.py --inp results/cpu_vs_dma_phase4.json --outdir results/plots
+cmake -S soc_c -B soc_c/build && cmake --build soc_c/build
+./soc_c/build/soc_c_cpu_vs_dma   # CSV: size,burst,words,bursts,dma_ticks,cpu_ticks
 ```
 
-Fresh `SoC` + `boot()` per measurement; 300 cells (6 sizes x 5 bursts x
-2 modes x 5 reps). Reps are bit-identical (`deterministic_across_reps: true`).
+Fresh `soc_t` + `soc_boot()` per cell; 30 cells (6 sizes x 5 bursts).
+Every cell byte-compares source vs destination (mismatch aborts non-zero).
+Determinism is asserted, not sampled: `soc_c_dma_burst` requires identical
+ticks across repeated runs (the old harness's `deterministic_across_reps`).
 
 ## REAL OBSERVATIONS (base config, rep 0)
 
@@ -80,12 +76,14 @@ Burst sweep (DMA total ticks, IRQ mode):
 | 4096 | 2047 | 1535 | 1279 | 1151 | 1087 |
 | 16384 | 8191 | 6143 | 5119 | 4607 | 4351 |
 
-Polling vs IRQ (burst=4): **identical total/transfer ticks at every size**
-(e.g. 16B: 4/4; 16KB: 5119/5119). The difference is handling cost, not time:
+Polling vs IRQ (burst=4, model property): total/transfer ticks are
+identical at every size (e.g. 16B: 4/4; 16KB: 5119/5119), because ACK/CLEAR
+are combinational here. The difference is handling cost, not time:
 polling does N+1 STATUS reads with `irq_count=0`; IRQ does 3 post-transfer
-reads + ACK/CLEAR with `irq_count=1` and exactly **+2 MEM_ACC** vs polling at
-every size (e.g. 12 vs 14 at 16B; 5127 vs 5129 at 16KB). Stalls were 0 in all
-cells. `destination_match` was true in all 300 runs.
+reads + ACK/CLEAR with `irq_count=1` and exactly **+2 MEM_ACC** vs polling
+at every size (e.g. 12 vs 14 at 16B; 5127 vs 5129 at 16KB) — measured in
+the archived Python harness; the current C bench covers transfer ticks
+plus byte-compare per cell.
 
 ## MODEL BEHAVIOR (why the curves look this way)
 
@@ -113,5 +111,6 @@ cells. `destination_match` was true in all 300 runs.
   entry cost; MMIO is combinational; single channel; no chained transfers.
 * 64KB single transfers exceed the 64KB SRAM and were excluded by a runtime
   fit check rather than worked around.
-* Results are valid only for the stated config; change `ram_latency_ticks`,
-  `dma_latency_per_word_ticks`, or `dma_burst` and all numbers move.
+* Results are valid only for the stated config; change the
+  `soc_config_t` timing fields (which mirror `configs/base.yaml`) and all
+  numbers move.

@@ -21,7 +21,7 @@ int main(void) {
             return 3;
         }
     }
-    /* Arm a one-shot timer (host shim stores config; expiry in Python model). */
+    /* Arm a one-shot timer (host shim stores config; expiry in the model). */
     timer_start(100, 0, 1);
     printf("vlab-soc boot ok: hello sent, timer armed\n");
     return 0;

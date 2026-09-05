@@ -1,6 +1,6 @@
 /* Fault tests: invalid use rejected pre-START, error latched via ISR,
- * recovery restores a working engine. Complements the Python fault matrix
- * (validation/faults/) at the C driver level.
+ * recovery restores a working engine. Complements soc_c_faults
+ * (model-level faults) at the C driver level.
  */
 #include <assert.h>
 #include <stdio.h>

@@ -1,8 +1,9 @@
 # vlab-soc Specification v0.3 (INTC complete; DMA burst)
 
-This is the imaginary silicon's contract. The Python model (`soc/`) and the
+This is the imaginary silicon's contract. The C model (`soc_c/`) and the
 C firmware (`firmware/`) MUST both conform to it. `firmware/include/soc_regs.h`
-is generated from `configs/regs.yaml` by `tools/reggen.py` and matches this
+is frozen from `configs/regs.yaml` (the former `tools/reggen.py` generator
+was removed in the pure-C migration) and matches this
 document.
 
 Status: INTC complete; DMA burst + completion/error IRQ. Chained mode,
@@ -43,7 +44,8 @@ All MMIO registers are 32-bit little-endian, word-aligned. See
 
 ## 3. Access permissions and bus errors
 
-The bus (`soc/bus.py`) raises `BusError` (and counts a stall) on:
+The bus (`soc_c` `soc_read`/`soc_write`, error code `SOC_ERR_BUS`) faults
+(and counts a stall) on:
 
 1. Address outside any mapped region.
 2. Write to `RO`, read from `WO`.
@@ -177,12 +179,12 @@ Reset -> ROM -> startup (stack, .data copy, .bss zero) -> main()
 ```
 
 * `Reset` zeroes CPU state, sets PC to ROM base, enables PERF if configured.
-* Startup is modelled by `soc.boot(rom_image)`: loads image words into ROM,
-  zeroes SRAM `.bss` region, sets SP to SRAM top, jumps to `main` marker.
+* Startup is modelled by `soc_boot()`: loads image words into ROM,
+  zeroes SRAM, sets SP to SRAM top, marks main entry.
 * C `firmware/boot/boot.c:boot_init()` mirrors this: disables IRQs, inits
   `.data/.bss` (host-native simulation of the copy/zero), inits PERF,UART.
 * Boot time = ticks from `Reset` to `main` entry; measured by
-  `benchmarks/boot_time.py`, not estimated.
+  the `soc_c_boot_time` tool, not estimated.
 
 ## 7. Clocks and determinism
 
@@ -196,10 +198,10 @@ Reset -> ROM -> startup (stack, .data copy, .bss zero) -> main()
 
 | Condition | Detection | Reporting |
 |-----------|-----------|-----------|
-| Invalid MMIO address | bus | `BusError` |
-| RO write / WO read | bus | `BusError` |
-| Unaligned MMIO | bus | `BusError` |
-| ROM write | bus | `BusError` |
+| Invalid MMIO address | bus | `SOC_ERR_BUS` |
+| RO write / WO read | bus | `SOC_ERR_BUS` |
+| Unaligned MMIO | bus | `SOC_ERR_BUS` |
+| ROM write | bus | `SOC_ERR_BUS` |
 | UART TX while disabled | driver | `UART_ERR_DISABLED` |
 | TIMER LOAD=0 + ENABLE | peripheral | No fire (stays at 0, no IRQ) |
 | DMA bad address/align/len | DMA | `STATUS.ERROR=1` + `ERR_CODE` |

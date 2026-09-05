@@ -13,7 +13,7 @@ Metric classes used throughout:
 
 | Class | Meaning | Examples |
 |---|---|---|
-| **measured** | Directly observed from `soc.ticks`, PERF counters, registers, trace | injection/detection/recovery tick, IRQ_COUNT, MEM_ACC, STALLS, STATUS bits |
+| **measured** | Directly observed from model ticks, PERF counters, registers | injection/detection/recovery tick, IRQ_COUNT, MEM_ACC, STALLS, STATUS bits |
 | **derived** | Arithmetic on measured values | detection/recovery latency, throughput, crossover |
 | **modeled** | Behavior defined by the virtual model | stuck-busy freeze, timeout budgets, CPU wait ticks |
 
@@ -29,9 +29,9 @@ precise model ticks/events, and measurable in detection/recovery latency.
 
 * Faults are **deterministic and reproducible**: same scenario → identical
   ticks, counters, and final state (verified by repetition tests).
-* Faults are injected at precise **model ticks** (`apply_at_tick`) or
-  **deterministic events** (`apply_at_event`, e.g. “when DMA becomes BUSY”).
-  No wall-clock sleeps, no randomness.
+* Faults are injected/cleared around explicit `soc_step()` windows
+  (`soc_fault_inject` / `soc_fault_clear`, e.g. inject mid-BUSY, step 50,
+  assert still BUSY). No wall-clock sleeps, no randomness.
 * Faults are **additive latches** on top of the model: default off, so every
   Phase-1–4 test behaves bit-identically with the injector present.
 * Detection uses **model-tick budgets** (validation-side timeouts), and
@@ -48,9 +48,9 @@ precise model ticks/events, and measurable in detection/recovery latency.
 | `uart-stuck-busy` | TX, then latch stuck-busy | STATUS stays BUSY, RX_VALID never sets, no completion IRQ; validation budget expires → detect; clear latch → completes normally |
 | `irq-storm-timer` | N rapid TIMER raises pre-ACK | PENDING coalesces to one bit; exactly one logical ACK; IRQ_COUNT +1; priority intact |
 | `irq-storm-mixed` | UART + TIMER + DMA pending together | ACK order strictly 1, 2, 0; unrelated bits never cleared |
-| `mmio-unmapped-read/write` | Access 0x30000000-class address | `BusError` + STALLS +1 (spec §3) |
-| `mmio-ro-write` / `mmio-wo-read` | Illegal direction access | `BusError` + STALLS +1 (spec §3) |
-| `mmio-bad-offset` | Valid base + invalid offset | `BusError` + STALLS +1 |
+| `mmio-unmapped-read/write` | Access 0x30000000-class address | `SOC_ERR_BUS` + STALLS +1 (spec §3) |
+| `mmio-ro-write` / `mmio-wo-read` | Illegal direction access | `SOC_ERR_BUS` + STALLS +1 (spec §3) |
+| `mmio-bad-offset` | Valid base + invalid offset | `SOC_ERR_BUS` + STALLS +1 |
 | `timer-reset-pending` | `reset_peripherals()` while TIMER IRQ pending/fired | All peripherals return to documented reset values; PENDING/ACTIVE cleared; software re-inits and resumes |
 | `reset-during-dma` | `reset_peripherals()` while DMA BUSY | DMA returns to idle (BUSY/DONE/ERROR cleared); partial transfer discarded; software re-runs and completes |
 
@@ -60,13 +60,14 @@ introduced — storms queue per the documented non-preemptive semantics.
 
 ## 4. Injection mechanism
 
-`soc/faults.py` provides `Fault` (name + params) and `FaultInjector` with
-`inject / clear / is_active / apply_at_tick / apply_at_event`. The harness
-calls `injector.poll(soc)` after every `soc.step()`; scheduled faults fire
-when `soc.ticks` reaches the target tick or when the event predicate first
-holds. Stuck faults (`dma-timeout`, `uart-stuck-busy`) set additive latches
-in the DMA/UART models; all other faults are pure stimulus sequences through
-the existing MMIO/bus interface.
+`soc_c/include/soc_faults.h` provides `soc_fault_injector_t` with
+`soc_fault_inject / soc_fault_clear / soc_fault_is_active` plus the
+`soc_recovery_tracker_t` state machine (`NORMAL → FAULT_DETECTED →
+RECOVERY → RECOVERED/UNRECOVERABLE`, illegal transitions rejected).
+Stuck faults (`dma-timeout`, `uart-stuck-busy`) set additive latches in
+the DMA/UART models (default off, so all other tests behave identically);
+all other faults are pure stimulus sequences through the existing
+MMIO/bus interface.
 
 ## 5. Recovery model (validation level)
 
@@ -89,27 +90,27 @@ all Phase-5 faults define one, and tests assert the defined outcome — never
 ## 6. Measurement methodology
 
 ```bash
-python3 benchmarks/fault_injection.py \
-  --config configs/base.yaml \
-  --faults dma-invalid,dma-timeout,uart-stuck,irq-storm,mmio-invalid \
-  --reps 5 \
-  --out results/fault_injection.json
-python3 tools/plot_faults.py --input results/fault_injection.json
+ctest --test-dir soc_c/build -R soc_c_faults --output-on-failure
 ```
 
-11 cases x 5 reps = 55 runs, each from a fresh `SoC` + `boot()`. Timeout
-budgets are modeled parameters recorded per run (`timeout_budget_ticks`):
-DMA timeout 76 ticks (4x the healthy 64B transfer), UART stuck 20 ticks
-(4x UART latency), storms observed over fixed step windows, MMIO synchronous
-(latency 0). Reset faults (`timer-reset`, `reset-during-dma`) are harness-
-capable (`--faults timer-reset,reset-during-dma`, verified deterministic)
-and covered by `validation/faults/test_reset_faults.py`. Plots
-(`results/plots/f1..f7`, gitignored) render rep means from the JSON.
+The `soc_c_faults` CTest gates the same fault classes structurally:
+latching `dma-timeout` freezes a BUSY transfer mid-countdown (still BUSY
+after 50 ticks, DONE after unlatch + step); `uart-stuck-busy` holds BUSY
+across 20 ticks and completes after unlatch; invalid DMA fails
+synchronously with the destination guard intact; the recovery tracker
+accepts the legal path and rejects illegal transitions. Timeout budgets
+are modeled parameters: DMA timeout 76 ticks (4x the healthy 64B
+transfer), UART stuck 20 ticks (4x UART latency).
+
+The former 11-case x 5-rep = 55-run Python matrix (`benchmarks/
+fault_injection.py`, `validation/faults/`) was removed in the pure-C
+migration; its results are archived below unchanged, since the model
+semantics they measured are identical in `soc_c`.
 
 ## 7. Results
 
-REAL OBSERVATIONS — `configs/base.yaml`, 5 reps per fault, bit-identical
-across reps (`deterministic_across_reps: true`):
+REAL OBSERVATIONS — archived Python-harness matrix (`configs/base.yaml`,
+5 reps per fault, bit-identical across reps):
 
 | fault | det (ticks) | rec (ticks) | final | irq total | origin of IRQs |
 |---|---|---|---|---|---|
@@ -150,8 +151,9 @@ unchanged at 5 ticks.
 
 * Stuck faults are single-latch freezes, not degraded-performance modes;
   there is no flaky/intermittent fault class.
-* No fault reaches UNRECOVERABLE in this matrix — the branch is unit-tested
-  in `test_fault_recovery.py` but has no model-defined instance yet.
+* No fault reaches UNRECOVERABLE in this matrix — the branch is
+  asserted in `soc_c_faults` (illegal transitions rejected) but has no
+  model-defined instance yet.
 * Detection budgets are chosen, not learned; a too-small budget would false-
   positive on a slow healthy transfer (budgets are recorded per run so this
   is auditable).

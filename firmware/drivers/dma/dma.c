@@ -8,7 +8,7 @@
  * never hard-codes SRAM, alignment, or transfer limits. Default
  * configuration is the VLAB platform (dma_init); dma_configure overrides
  * it. Validation order BUSY/LEN/ALIGN/MAX/ADDR/DIRECTION matches the
- * Python model. Completion and error both raise the DMA INTC line when
+ * soc_c model. Completion and error both raise the DMA INTC line when
  * irq_enable is set. Clearing is two-step: dma_clear() clears DMA flags,
  * then intc_clear() clears the pending bit. */
 
@@ -25,7 +25,7 @@ static volatile uint32_t s_done_flag = 0;
 static volatile uint32_t s_err_latch = 0;
 static volatile uint32_t s_irq_count = 0;
 
-/* Shared validation, same order as the Python model
+/* Shared validation, same order as the soc_c model
  * (BUSY/LEN/ALIGN/MAX/ADDR/DIRECTION) so host tests and golden-model
  * tests assert identical behavior. LEN/ALIGN/ADDR mean invalid
  * driver-API use; over-max and disallowed directions mean unsupported by
