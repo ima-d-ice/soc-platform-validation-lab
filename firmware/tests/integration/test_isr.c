@@ -118,6 +118,7 @@ static void test_priority_order_on_dispatch(void) {
 }
 
 int main(void) {
+    dma_init(); /* VLAB platform defaults */
     test_dispatch_empty();
     test_completion_path();
     test_error_path_and_recover();

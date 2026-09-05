@@ -60,6 +60,7 @@ static void test_intc_mask_and_ack(void) {
 }
 
 int main(void) {
+    dma_init(); /* VLAB platform defaults; required before any transfer */
     test_dma_validation_order();
     test_dma_programs_registers();
     test_uart_disabled_rejected();

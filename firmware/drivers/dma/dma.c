@@ -1,15 +1,21 @@
 #include "driver_api.h"
 #include "hal.h"
 #include "isr.h"
+#include "platforms/vlab/platform_vlab.h"
 #include "soc_regs.h"
 
-/* Burst size is platform-config only (configs dir, dma_burst key); no BURST
- * register. Completion and error both raise the DMA INTC line when
+/* DMA consumes platform configuration (memory map + capabilities); it
+ * never hard-codes SRAM, alignment, or transfer limits. Default
+ * configuration is the VLAB platform (dma_init); dma_configure overrides
+ * it. Validation order BUSY/LEN/ALIGN/MAX/ADDR/DIRECTION matches the
+ * Python model. Completion and error both raise the DMA INTC line when
  * irq_enable is set. Clearing is two-step: dma_clear() clears DMA flags,
- * then intc_clear(2) clears the pending bit. */
+ * then intc_clear() clears the pending bit. */
 
-#define SRAM_BASE 0x10000000U
-#define SRAM_SIZE 0x00010000U
+/* Platform configuration (not owned here; init/configure install it). */
+static const struct memory_region *s_map = NULL;
+static uint32_t s_map_n = 0;
+static const struct dma_caps *s_caps = NULL;
 
 /* Interrupt-driven lifecycle state. Volatile: written by dma_isr (ISR
  * context on silicon), read by main-line code. Every cross-context access
@@ -19,22 +25,44 @@ static volatile uint32_t s_done_flag = 0;
 static volatile uint32_t s_err_latch = 0;
 static volatile uint32_t s_irq_count = 0;
 
-static int in_sram(uint32_t addr, uint32_t len) {
-    if (len == 0) return 0;
-    if (addr < SRAM_BASE) return 0;
-    if (addr + len < addr) return 0; /* wrap */
-    return (addr + len) <= (SRAM_BASE + SRAM_SIZE);
-}
-
-/* Shared validation, same order as the Python model (BUSY/LEN/ALIGN/ADDR)
- * so host tests and golden-model tests assert identical behavior. */
+/* Shared validation, same order as the Python model
+ * (BUSY/LEN/ALIGN/MAX/ADDR/DIRECTION) so host tests and golden-model
+ * tests assert identical behavior. LEN/ALIGN/ADDR mean invalid
+ * driver-API use; over-max and disallowed directions mean unsupported by
+ * the configured platform. */
 static int validate(uint32_t src, uint32_t dst, uint32_t len) {
+    uint32_t align;
+    int src_type, dst_type;
     if (hal_read_reg(VLAB_DMA_STATUS) & VLAB_DMA_STATUS_BUSY)
         return VLAB_DMA_ERR_BUSY;
-    if (len == 0 || (len % 4U) != 0) return VLAB_DMA_ERR_LEN;
-    if ((src % 4U) != 0 || (dst % 4U) != 0) return VLAB_DMA_ERR_ALIGN;
-    if (!in_sram(src, len) || !in_sram(dst, len)) return VLAB_DMA_ERR_ADDR;
+    align = (s_caps && s_caps->alignment > 1) ? s_caps->alignment : 1U;
+    if (len == 0 || (align > 1 && len % align != 0)) return VLAB_DMA_ERR_LEN;
+    if (align > 1 && (src % align != 0 || dst % align != 0))
+        return VLAB_DMA_ERR_ALIGN;
+    if (s_caps && s_caps->max_transfer && len > s_caps->max_transfer)
+        return VLAB_DMA_ERR_UNSUPPORTED;
+    src_type = dma_endpoint_type(s_map, s_map_n, src, len);
+    dst_type = dma_endpoint_type(s_map, s_map_n, dst, len);
+    if (src_type < 0 || dst_type < 0) return VLAB_DMA_ERR_ADDR;
+    if (s_caps && !dma_direction_supported(s_caps, src_type, dst_type))
+        return VLAB_DMA_ERR_UNSUPPORTED;
     return VLAB_DMA_OK;
+}
+
+void dma_init(void) {
+    s_map = vlab_memory_map(&s_map_n);
+    s_caps = vlab_dma_caps();
+}
+
+void dma_configure(const struct memory_region *map, uint32_t n,
+                   const struct dma_caps *caps) {
+    if (map != NULL && n > 0) {
+        s_map = map;
+        s_map_n = n;
+    }
+    if (caps != NULL) {
+        s_caps = caps;
+    }
 }
 
 int dma_start(uint32_t src, uint32_t dst, uint32_t len, int irq_enable) {

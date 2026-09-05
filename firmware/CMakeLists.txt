@@ -15,14 +15,17 @@ endif()
 add_library(vlab_drivers STATIC
   drivers/mmio.c
   hal/hal.c
-  drivers/uart.c
-  drivers/timer.c
-  drivers/intc.c
-  drivers/dma.c
+  drivers/uart/uart.c
+  drivers/timer/timer.c
+  drivers/intc/intc.c
+  drivers/dma/dma.c
   isr/isr.c
+  platforms/vlab/platform_vlab.c
   boot/boot.c
 )
-target_include_directories(vlab_drivers PUBLIC include)
+# Public headers (driver API, HAL, ISR, caps, regions, generated regs);
+# the firmware root itself is private so drivers reach platforms/ data.
+target_include_directories(vlab_drivers PUBLIC include PRIVATE .)
 
 # Host simulation: MMIO routes to the shim; silicon builds unset this and
 # use volatile pointer dereferences in hal/hal.c.
@@ -39,14 +42,19 @@ add_test(NAME firmware_smoke COMMAND firmware)
 add_test(NAME isr_demo_fw COMMAND isr_demo)
 set_tests_properties(isr_demo_fw PROPERTIES PASS_REGULAR_EXPRESSION "DEMO OK")
 
-add_executable(test_hal tests/test_hal.c)
-target_link_libraries(test_hal PRIVATE vlab_drivers)
-add_test(NAME hal_unit COMMAND test_hal)
+function(vlab_test name src)
+  add_executable(${name} ${src})
+  target_link_libraries(${name} PRIVATE vlab_drivers)
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
 
-add_executable(test_drivers tests/test_drivers.c)
-target_link_libraries(test_drivers PRIVATE vlab_drivers)
-add_test(NAME drivers_unit COMMAND test_drivers)
-
-add_executable(test_isr tests/test_isr.c)
-target_link_libraries(test_isr PRIVATE vlab_drivers)
-add_test(NAME isr_unit COMMAND test_isr)
+# Unit: pure logic, one module at a time.
+vlab_test(hal_unit tests/unit/test_hal.c)
+vlab_test(drivers_unit tests/unit/test_drivers.c)
+vlab_test(mem_regions_unit tests/unit/test_mem_regions.c)
+vlab_test(dma_caps_unit tests/unit/test_dma_caps.c)
+# Integration: driver + ISR + platform wiring.
+vlab_test(isr_unit tests/integration/test_isr.c)
+vlab_test(dma_platform_integration tests/integration/test_dma_platform.c)
+# Fault: invalid use, error latch, recovery.
+vlab_test(dma_faults tests/fault/test_dma_faults.c)

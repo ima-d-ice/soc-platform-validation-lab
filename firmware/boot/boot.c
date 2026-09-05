@@ -26,6 +26,9 @@ int boot_init(void) {
     for (unsigned i = 0; i < 8; i++) s_ram_bss[i] = 0U;
     /* 5. Minimal UART init (bauddiv informational in MVP). */
     uart_init(0U);
+    /* 6. DMA platform configuration (VLAB defaults; dma_configure can
+     * override for another platform before first use). */
+    dma_init();
     return 0;
 }
 

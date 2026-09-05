@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "dma_caps.h"
+#include "mem_regions.h"
+
 /* MMIO (host shim in mmio.c; on silicon these are volatile accesses). */
 uint32_t vlab_mmio_read(uint32_t addr);
 void vlab_mmio_write(uint32_t addr, uint32_t val);
@@ -29,12 +32,22 @@ uint32_t intc_ack(void);
 void intc_enable(uint32_t mask);
 void intc_clear(uint32_t irq);
 
-/* DMA. Returns 0 ok, negative on validation error (mirrors ERR_CODE). */
+/* DMA. Returns 0 ok, negative on validation error (mirrors ERR_CODE).
+ * VLAB_DMA_ERR_UNSUPPORTED mirrors register code 4: mapped but outside
+ * the platform's DMA capabilities (vs ADDR = unmapped/invalid use). */
 #define VLAB_DMA_OK 0
 #define VLAB_DMA_ERR_ADDR (-1)
 #define VLAB_DMA_ERR_ALIGN (-2)
 #define VLAB_DMA_ERR_LEN (-3)
 #define VLAB_DMA_ERR_BUSY (-4)
+#define VLAB_DMA_ERR_UNSUPPORTED (-5)
+
+/* DMA configuration: platform region table + capabilities. dma_init()
+ * loads the VLAB platform defaults (call after boot, before use);
+ * dma_configure() overrides with another platform's tables. */
+void dma_init(void);
+void dma_configure(const struct memory_region *map, uint32_t n,
+                   const struct dma_caps *caps);
 int dma_start(uint32_t src, uint32_t dst, uint32_t len, int irq_enable);
 uint32_t dma_status(void);
 void dma_clear(void);
