@@ -1,7 +1,7 @@
 """Countdown timer: one-shot / periodic + IRQ."""
 from __future__ import annotations
 
-from .bus import BusError
+from ...bus import BusError
 
 CTRL_OFF = 0x00
 LOAD_OFF = 0x04

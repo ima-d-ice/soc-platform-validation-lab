@@ -8,8 +8,8 @@ duplicate these numbers; import them from here.
 """
 from __future__ import annotations
 
-from soc.dma_caps import DmaCaps
 from soc.memory import MemoryRegion, default_regions
+from soc.peripherals.dma.caps import DmaCaps
 
 # -- memory map --
 ROM_BASE = 0x00000000

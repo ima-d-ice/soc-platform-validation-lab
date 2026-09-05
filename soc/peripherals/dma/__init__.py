@@ -25,10 +25,10 @@ from __future__ import annotations
 
 import math
 
-from .bus import BusError
-from .dma_caps import (ERR_UNSUPPORTED, DmaCaps, dma_direction_supported,
-                       endpoint_type)
-from .memory import PERM_R, PERM_W, SRAM, MemoryRegion
+from ...bus import BusError
+from .caps import (ERR_UNSUPPORTED, DmaCaps, dma_direction_supported,
+                   endpoint_type)
+from ...memory import PERM_R, PERM_W, SRAM, MemoryRegion
 
 SRC_OFF = 0x00
 DST_OFF = 0x04

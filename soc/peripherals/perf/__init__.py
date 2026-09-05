@@ -1,7 +1,7 @@
 """Performance monitor: real model counters (never synthesised)."""
 from __future__ import annotations
 
-from .bus import BusError
+from ...bus import BusError
 
 PERF_CYCLES_OFF = 0x00
 PERF_MEM_ACC_OFF = 0x04

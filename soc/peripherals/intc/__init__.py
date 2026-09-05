@@ -16,7 +16,7 @@ Semantics (deterministic):
 """
 from __future__ import annotations
 
-from .bus import BusError
+from ...bus import BusError
 
 ENABLE_OFF = 0x00
 PENDING_OFF = 0x04

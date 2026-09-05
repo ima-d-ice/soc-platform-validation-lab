@@ -7,12 +7,12 @@ import yaml
 
 from .bus import BusError
 from .cpu import Cpu
-from .dma import Dma
-from .interrupts import Intc
+from .peripherals.dma import Dma
+from .peripherals.intc import Intc
 from .memory import SimpleMemory, find_region
-from .perf import Perf
-from .timer import Timer
-from .uart import Uart
+from .peripherals.perf import Perf
+from .peripherals.timer import Timer
+from .peripherals.uart import Uart
 from platforms.vlab import (BOOT_TICKS, DMA_BASE, INTC_BASE, PERF_BASE,
                             REGION_SIZE, ROM_BASE, SRAM_BASE, TIMER_BASE,
                             UART_BASE, vlab_dma_caps, vlab_irq_map,

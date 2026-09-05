@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .memory import DRAM, MMIO, PERIPHERAL, SRAM, MemoryRegion, find_region
+from ...memory import DRAM, MMIO, PERIPHERAL, SRAM, MemoryRegion, find_region
 
 # Endpoint address types from the DMA's point of view.
 DMA_MEM = "MEM"

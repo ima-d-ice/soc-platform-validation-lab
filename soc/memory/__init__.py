@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .bus import BusError
+from ..bus import BusError
 
 # Region types (general vocabulary; a platform uses the subset it has).
 ROM = "ROM"

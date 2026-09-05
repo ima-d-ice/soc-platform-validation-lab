@@ -6,7 +6,7 @@ there is no per-UART IRQ-enable bit, preserving the register map.
 """
 from __future__ import annotations
 
-from .bus import BusError
+from ...bus import BusError
 
 TXDATA_OFF = 0x00
 RXDATA_OFF = 0x04

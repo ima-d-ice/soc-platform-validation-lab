@@ -12,12 +12,13 @@ from __future__ import annotations
 import pytest
 
 from soc.bus import BusError
-from soc.dma import (STATUS_BUSY as BUSY, STATUS_DONE as DONE,
-                     Dma, STATUS_ERROR as ERROR, ERR_ADDR, ERR_ALIGN,
-                     ERR_LEN, ERR_UNSUPPORTED)
-from soc.dma_caps import (DMA_DEVICE, DMA_MEM, DMA_PERIPHERAL, DmaCaps,
-                          dma_address_valid, dma_direction_supported,
-                          endpoint_type)
+from soc.peripherals.dma import (STATUS_BUSY as BUSY, STATUS_DONE as DONE,
+                                 Dma, STATUS_ERROR as ERROR, ERR_ADDR,
+                                 ERR_ALIGN, ERR_LEN, ERR_UNSUPPORTED)
+from soc.peripherals.dma.caps import (DMA_DEVICE, DMA_MEM, DMA_PERIPHERAL,
+                                      DmaCaps, dma_address_valid,
+                                      dma_direction_supported,
+                                      endpoint_type)
 from soc.memory import (DRAM, MMIO, PERM_R, PERM_W, SRAM, MemoryRegion)
 
 SRAM_BASE = 0x10000000
