@@ -1,0 +1,55 @@
+# vlab-soc register map (single source of truth for reggen)
+# Addresses are byte addresses. All registers are 32-bit, little-endian,
+# word-aligned. Unaligned or out-of-range accesses raise a bus error.
+bases:
+  ROM: 0x00000000
+  SRAM: 0x10000000
+  UART: 0x20000000
+  TIMER: 0x20001000
+  DMA: 0x20002000
+  INTC: 0x20003000
+  PERF: 0x20004000
+
+sizes:
+  ROM: 16384
+  SRAM: 65536
+
+# irq lines (fixed for v0)
+irq_lines:
+  UART: 0
+  TIMER: 1
+  DMA: 2
+
+registers:
+  UART_TXDATA:    {base: UART, offset: 0x00, access: WO, reset: 0x00000000, desc: "TX holding; write queues one byte (bits[7:0])"}
+  UART_RXDATA:    {base: UART, offset: 0x04, access: RO, reset: 0x00000000, desc: "RX holding; loopback byte when RX_VALID"}
+  UART_STATUS:    {base: UART, offset: 0x08, access: RO, reset: 0x00000002, desc: "bit0 TX_BUSY, bit1 TX_EMPTY, bit2 RX_VALID"}
+  UART_CTRL:      {base: UART, offset: 0x0C, access: RW, reset: 0x00000000, desc: "bit0 ENABLE"}
+  UART_BAUDDIV:   {base: UART, offset: 0x10, access: RW, reset: 0x00000000, desc: "informational divider (MVP: no timing effect beyond latency_ticks)"}
+
+  TIMER_CTRL:       {base: TIMER, offset: 0x00, access: RW, reset: 0x00000000, desc: "bit0 ENABLE, bit1 PERIODIC, bit2 IRQ_ENABLE"}
+  TIMER_LOAD:       {base: TIMER, offset: 0x04, access: RW, reset: 0x00000000, desc: "reload value in ticks"}
+  TIMER_VALUE:      {base: TIMER, offset: 0x08, access: RO, reset: 0x00000000, desc: "current countdown value"}
+  TIMER_IRQ_STATUS: {base: TIMER, offset: 0x0C, access: RW, reset: 0x00000000, desc: "bit0 FIRED (W1C: write 1 to clear)"}
+  TIMER_IRQ_CLEAR:  {base: TIMER, offset: 0x10, access: WO, reset: 0x00000000, desc: "bit0: write 1 to clear FIRED"}
+
+  DMA_SRC:       {base: DMA, offset: 0x00, access: RW, reset: 0x00000000, desc: "source byte address (must be in SRAM, word-aligned for MVP)"}
+  DMA_DST:       {base: DMA, offset: 0x04, access: RW, reset: 0x00000000, desc: "destination byte address (must be in SRAM, word-aligned for MVP)"}
+  DMA_LEN:       {base: DMA, offset: 0x08, access: RW, reset: 0x00000000, desc: "transfer length in bytes (multiple of 4, >0)"}
+  DMA_CTRL:      {base: DMA, offset: 0x0C, access: RW, reset: 0x00000000, desc: "bit0 START (write 1 to start; auto-clears), bit1 IRQ_ENABLE"}
+  DMA_STATUS:    {base: DMA, offset: 0x10, access: RO, reset: 0x00000000, desc: "bit0 BUSY, bit1 DONE (sticky till next START), bit2 ERROR"}
+  DMA_IRQ_CLEAR: {base: DMA, offset: 0x14, access: WO, reset: 0x00000000, desc: "write 1 to clear DONE/ERROR IRQ"}
+  DMA_ERR_CODE:  {base: DMA, offset: 0x18, access: RO, reset: 0x00000000, desc: "0 none, 1 invalid address, 2 misaligned, 3 bad length"}
+
+  INTC_ENABLE:  {base: INTC, offset: 0x00, access: RW, reset: 0x00000000, desc: "bit[n] enables irq line n"}
+  INTC_PENDING: {base: INTC, offset: 0x04, access: RO, reset: 0x00000000, desc: "bit[n] pending (set by peripheral)"}
+  INTC_ACK:     {base: INTC, offset: 0x08, access: RO, reset: 0xFFFFFFFF, desc: "read returns highest pending+enabled irq or 0xFFFFFFFF; read acks it (clears PENDING, sets ACTIVE)"}
+  INTC_CLEAR:   {base: INTC, offset: 0x0C, access: WO, reset: 0x00000000, desc: "write irq number (0..2) to clear ACTIVE"}
+  INTC_ACTIVE:  {base: INTC, offset: 0x10, access: RO, reset: 0x00000000, desc: "bit[n] active (acked, not yet cleared)"}
+
+  PERF_CYCLES:    {base: PERF, offset: 0x00, access: RW, reset: 0x00000000, desc: "model tick counter (write 0 to reset; W1C not required)"}
+  PERF_MEM_ACC:   {base: PERF, offset: 0x04, access: RW, reset: 0x00000000, desc: "MMIO+memory access count"}
+  PERF_DMA_BYTES: {base: PERF, offset: 0x08, access: RW, reset: 0x00000000, desc: "DMA bytes moved"}
+  PERF_IRQ_COUNT: {base: PERF, offset: 0x0C, access: RW, reset: 0x00000000, desc: "interrupts acked"}
+  PERF_STALLS:    {base: PERF, offset: 0x10, access: RW, reset: 0x00000000, desc: "stall/wait ticks (e.g. UART busy poll, DMA busy wait)"}
+  PERF_CTRL:      {base: PERF, offset: 0x14, access: RW, reset: 0x00000000, desc: "bit0 ENABLE, bit1 RESET (write 1 to zero all counters)"}

@@ -1,0 +1,15 @@
+# Base virtual SoC configuration (v0.1 MVP).
+# All timing values are in model ticks unless noted.
+# cpu_frequency_mhz is informational for deriving wall-clock estimates;
+# the model itself steps in ticks for determinism.
+soc_name: vlab-soc-v0
+cpu_frequency_mhz: 100
+ram_latency_ticks: 2
+rom_latency_ticks: 1
+dma_channels: 1
+dma_burst: 4
+dma_latency_per_word_ticks: 1
+uart_latency_ticks: 5
+timer_tick_ticks: 1
+sram_size_bytes: 65536
+rom_size_bytes: 16384
