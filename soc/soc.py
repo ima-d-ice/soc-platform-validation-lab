@@ -9,7 +9,7 @@ from .bus import BusError
 from .cpu import Cpu
 from .dma import Dma
 from .interrupts import Intc
-from .memory import SimpleMemory
+from .memory import SimpleMemory, default_regions, find_region
 from .perf import Perf
 from .timer import Timer
 from .uart import Uart
@@ -40,6 +40,16 @@ class SoC:
         sram_size = int(config.get("sram_size_bytes", 65536))
         self.rom = SimpleMemory(ROM_BASE, rom_size, readonly=True, name="ROM")
         self.sram = SimpleMemory(SRAM_BASE, sram_size, readonly=False, name="SRAM")
+        # Platform memory map as data (CURRENT VLAB PLATFORM). The decoder
+        # below consults this table instead of hard-coded range checks.
+        self.regions = default_regions(
+            ROM_BASE, rom_size, SRAM_BASE, sram_size,
+            [("uart", UART_BASE, REGION_SIZE),
+             ("timer", TIMER_BASE, REGION_SIZE),
+             ("dma", DMA_BASE, REGION_SIZE),
+             ("intc", INTC_BASE, REGION_SIZE),
+             ("perf", PERF_BASE, REGION_SIZE)],
+        )
 
         self.perf = Perf()
         self.intc = Intc(perf=self.perf)
@@ -79,19 +89,14 @@ class SoC:
 
     # -- MMIO --
     def _route(self, addr: int):
-        if self.rom.contains(addr):
-            return "rom"
-        if self.sram.contains(addr):
-            return "sram"
-        for base, name in (
-            (UART_BASE, "uart"),
-            (TIMER_BASE, "timer"),
-            (DMA_BASE, "dma"),
-            (INTC_BASE, "intc"),
-            (PERF_BASE, "perf"),
-        ):
-            if base <= addr < base + REGION_SIZE:
-                return name
+        # Same lookup widths as the original decoder: word accesses for
+        # ROM/SRAM images, single-byte presence for MMIO windows.
+        region = find_region(self.regions, addr, 4)
+        if region is not None and region.name in ("rom", "sram"):
+            return region.name
+        region = find_region(self.regions, addr, 1)
+        if region is not None and region.name not in ("rom", "sram"):
+            return region.name
         return None
 
     def read(self, addr: int) -> int:
