@@ -62,6 +62,25 @@ REAL OBSERVATIONS: depth-1 halves throughput (~1.6 vs ~3.2 B/tick);
 polling vs notification identical ticks, reads-vs-IRQ tradeoff; throughput
 converges to ~3.2 B/tick; zero mismatches in all 200 cells.
 
+## Final system matrix (`benchmarks/final_matrix.py`, report `tools/final_report.py`)
+
+```bash
+python3 benchmarks/final_matrix.py --config configs/base.yaml \
+  --sizes 64,1024,4096,16384 --reps 3 --out results/final_matrix.json
+python3 tools/final_report.py --input results/final_matrix.json \
+  --out results/final_report.md
+python3 tools/final_plots.py --input results/final_matrix.json \
+  --outdir results/plots
+```
+
+EXP-F1..F8 reuse the phase benchmark definitions by import (no
+redefinition): CPU/DMA scaling, burst scaling, polling-vs-IRQ view,
+buffering, RTOS priority, Linux behavior, fault detection/recovery, and
+seven deterministic stress scenarios (high IRQ rate, DMA pressure, queue
+pressure, starvation, comm timeout, invalid access, repeated reset).
+Bottlenecks are derived dominant shares with the combinational-MMIO
+caveat stated alongside.
+
 ## Fault injection (`benchmarks/fault_injection.py`, see `docs/fault-injection.md`)
 
 ```bash
