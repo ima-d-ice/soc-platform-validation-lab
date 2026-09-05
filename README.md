@@ -89,8 +89,3 @@ and `docs/dma-optimization.md` / `docs/fault-injection.md` for studies.
 `docs/limitations.md`: model-only ticks, combinational MMIO, modeled
 waits/budgets, no contention/caches/masters, single DMA channel, bounded
 fault classes, 16KB transfer cap. Nothing here is ARM/MCU/silicon data.
-
-## Interview prep
-
-`docs/interview-prep.md` is a private local note and is gitignored — it
-is never committed or pushed.
