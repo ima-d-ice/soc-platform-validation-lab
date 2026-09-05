@@ -1,4 +1,4 @@
-"""INTC validation: gating, ack->active->clear, spurious ack."""
+"""INTC validation: gating, ack->active->clear, spurious/double ack (v0.2)."""
 from __future__ import annotations
 
 INTC_BASE = 0x20003000
@@ -49,3 +49,29 @@ def test_spurious_ack_returns_none(soc):
     assert soc.read(ACK) == IRQ_NONE
     after = soc.read(0x2000400C)
     assert after == before  # spurious ack counts nothing
+
+
+def test_double_ack_returns_none(soc):
+    soc.write(ENABLE, 1 << IRQ_TIMER)
+    _fire_timer(soc)
+    assert soc.read(ACK) == IRQ_TIMER
+    assert soc.read(ACK) == IRQ_NONE  # already moved to ACTIVE
+    soc.write(CLEAR, IRQ_TIMER)
+
+
+def test_clear_without_active_is_noop(soc):
+    soc.write(ENABLE, 0x7)
+    assert soc.read(ACTIVE) == 0
+    soc.write(CLEAR, IRQ_TIMER)  # nothing active: no fault, still zero
+    assert soc.read(ACTIVE) == 0
+    assert soc.read(ACK) == IRQ_NONE
+
+
+def test_invalid_clear_ignored(soc):
+    soc.write(ENABLE, 1 << IRQ_TIMER)
+    _fire_timer(soc)
+    assert soc.read(ACK) == IRQ_TIMER
+    soc.write(CLEAR, 9)  # out-of-range: ignored, ACTIVE bit stays
+    assert soc.read(ACTIVE) & (1 << IRQ_TIMER)
+    soc.write(CLEAR, IRQ_TIMER)
+    assert not (soc.read(ACTIVE) & (1 << IRQ_TIMER))

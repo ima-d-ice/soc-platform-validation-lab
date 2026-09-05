@@ -46,6 +46,7 @@ class SoC:
         self.uart = Uart(
             latency_ticks=int(config.get("uart_latency_ticks", 5)),
             perf=self.perf,
+            intc=self.intc,
         )
         self.timer = Timer(intc=self.intc)
         self.dma = Dma(
@@ -73,9 +74,7 @@ class SoC:
         self.uart.reset()
         self.timer.reset()
         self.dma.reset()
-        self.intc.enable = 0
-        self.intc.pending = 0
-        self.intc.active = 0
+        self.intc.reset()
 
     # -- MMIO --
     def _route(self, addr: int):

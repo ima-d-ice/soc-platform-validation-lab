@@ -1,4 +1,9 @@
-"""UART loopback model with busy latency."""
+"""UART loopback model with busy latency + RX completion IRQ (line 0).
+
+IRQ policy (v0.2): when a TX completes (busy expires, RX_VALID set), raise
+INTC line 0 unconditionally. Delivery is gated solely by INTC.ENABLE —
+there is no per-UART IRQ-enable bit, preserving the register map.
+"""
 from __future__ import annotations
 
 from .bus import BusError
@@ -16,11 +21,14 @@ CTRL_ENABLE = 1 << 0
 
 UART_ERR_DISABLED = -1
 
+IRQ_LINE = 0
+
 
 class Uart:
-    def __init__(self, *, latency_ticks: int = 5, perf=None):
+    def __init__(self, *, latency_ticks: int = 5, perf=None, intc=None):
         self.latency_ticks = latency_ticks
         self._perf = perf
+        self._intc = intc
         self.ctrl = 0
         self.bauddiv = 0
         self._txdata = 0
@@ -88,3 +96,5 @@ class Uart:
             if self._busy == 0:
                 self._rxdata = self._txdata
                 self._rx_valid = True
+                if self._intc is not None:
+                    self._intc.raise_irq(IRQ_LINE)

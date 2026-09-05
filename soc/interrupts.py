@@ -1,6 +1,18 @@
-"""Interrupt controller: enable/pending/active + read-to-ack.
+"""Interrupt controller: enable/pending/active + read-to-ack (v0.2, complete).
 
-Fixed MVP priority: TIMER(1) > DMA(2) > UART(0).
+Fixed priority: TIMER(1) > DMA(2) > UART(0). Non-preemptive, queued.
+
+Semantics (deterministic):
+- raise_irq sets the PENDING bit (idempotent/coalesced: N raises before an
+  ACK still yield exactly one pending bit and one ACK).
+- ACK reads the highest pending+enabled line, atomically clears its PENDING
+  bit and sets its ACTIVE bit, counts one PERF IRQ. Spurious ACK (nothing
+  pending+enabled) returns IRQ_NONE and counts nothing.
+- CLEAR takes an irq number 0..2 and clears its ACTIVE bit. Out-of-range
+  numbers are ignored (no fault). Clearing an inactive line is a no-op.
+- ENABLE gates ACK only; PENDING still records while disabled.
+- No nesting/preemption: a second source pending while one is ACTIVE stays
+  pending until ACKed in priority order.
 """
 from __future__ import annotations
 
@@ -28,6 +40,11 @@ class Intc:
         self.pending = 0
         self.active = 0
         self._perf = perf
+
+    def reset(self) -> None:
+        self.enable = 0
+        self.pending = 0
+        self.active = 0
 
     def raise_irq(self, line: int) -> None:
         if 0 <= line < N_LINES:

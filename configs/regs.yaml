@@ -21,7 +21,7 @@ irq_lines:
   DMA: 2
 
 registers:
-  UART_TXDATA:    {base: UART, offset: 0x00, access: WO, reset: 0x00000000, desc: "TX holding; write queues one byte (bits[7:0])"}
+  UART_TXDATA:    {base: UART, offset: 0x00, access: WO, reset: 0x00000000, desc: "TX holding; write queues one byte (bits[7:0]); completion raises INTC line 0"}
   UART_RXDATA:    {base: UART, offset: 0x04, access: RO, reset: 0x00000000, desc: "RX holding; loopback byte when RX_VALID"}
   UART_STATUS:    {base: UART, offset: 0x08, access: RO, reset: 0x00000002, desc: "bit0 TX_BUSY, bit1 TX_EMPTY, bit2 RX_VALID"}
   UART_CTRL:      {base: UART, offset: 0x0C, access: RW, reset: 0x00000000, desc: "bit0 ENABLE"}
@@ -41,10 +41,10 @@ registers:
   DMA_IRQ_CLEAR: {base: DMA, offset: 0x14, access: WO, reset: 0x00000000, desc: "write 1 to clear DONE/ERROR IRQ"}
   DMA_ERR_CODE:  {base: DMA, offset: 0x18, access: RO, reset: 0x00000000, desc: "0 none, 1 invalid address, 2 misaligned, 3 bad length"}
 
-  INTC_ENABLE:  {base: INTC, offset: 0x00, access: RW, reset: 0x00000000, desc: "bit[n] enables irq line n"}
-  INTC_PENDING: {base: INTC, offset: 0x04, access: RO, reset: 0x00000000, desc: "bit[n] pending (set by peripheral)"}
-  INTC_ACK:     {base: INTC, offset: 0x08, access: RO, reset: 0xFFFFFFFF, desc: "read returns highest pending+enabled irq or 0xFFFFFFFF; read acks it (clears PENDING, sets ACTIVE)"}
-  INTC_CLEAR:   {base: INTC, offset: 0x0C, access: WO, reset: 0x00000000, desc: "write irq number (0..2) to clear ACTIVE"}
+  INTC_ENABLE:  {base: INTC, offset: 0x00, access: RW, reset: 0x00000000, desc: "bit[n] enables irq line n (gates ACK; pending still records)"}
+  INTC_PENDING: {base: INTC, offset: 0x04, access: RO, reset: 0x00000000, desc: "bit[n] pending, coalesced (set by peripheral)"}
+  INTC_ACK:     {base: INTC, offset: 0x08, access: RO, reset: 0xFFFFFFFF, desc: "read returns highest pending+enabled irq or 0xFFFFFFFF; read acks it (clears PENDING, sets ACTIVE); spurious/double-ack returns 0xFFFFFFFF"}
+  INTC_CLEAR:   {base: INTC, offset: 0x0C, access: WO, reset: 0x00000000, desc: "write irq number (0..2) to clear ACTIVE; out-of-range ignored"}
   INTC_ACTIVE:  {base: INTC, offset: 0x10, access: RO, reset: 0x00000000, desc: "bit[n] active (acked, not yet cleared)"}
 
   PERF_CYCLES:    {base: PERF, offset: 0x00, access: RW, reset: 0x00000000, desc: "model tick counter (write 0 to reset; W1C not required)"}

@@ -1,13 +1,18 @@
-# vlab-soc Specification v0.1 (MVP contract)
+# vlab-soc Specification v0.2 (INTC complete; DMA burst pending)
 
 This is the imaginary silicon's contract. The Python model (`soc/`) and the
 C firmware (`firmware/`) MUST both conform to it. `firmware/include/soc_regs.h`
 is generated from `configs/regs.yaml` by `tools/reggen.py` and matches this
 document.
 
-Status: MVP (§1–§5). Priority/nesting refinements, DMA burst/chained modes,
+Status: INTC complete (§4/§5.4, UART RX IRQ). DMA burst/chained modes,
 fault-injection behaviour beyond bus errors, and config-sweep characterisation
 are explicitly **deferred**.
+
+Changelog v0.1 -> v0.2: UART raises INTC line 0 on RX_VALID completion
+(delivery gated solely by INTC.ENABLE; no new registers, no address changes);
+INTC semantics completed (coalesced pending, read-to-ack, spurious/double-ack,
+invalid-CLEAR ignore, non-preemptive queueing).
 
 ## 1. Memory map
 
@@ -53,10 +58,14 @@ rejection (`test_bus_errors`).
 | 1    | TIMER  | highest (0)  |
 | 2    | DMA    | middle (1)   |
 
-Priority order (MVP): `TIMER > DMA > UART`. Nested/preemptive behaviour is
-**deferred**; MVP `INTC_ACK` returns the highest pending+enabled line,
-moves it `PENDING -> ACTIVE`, and `INTC_CLEAR` (write irq number) clears
-`ACTIVE`. `PENDING` is read-only. `ENABLE` gates `ACK`.
+Priority order: `TIMER > DMA > UART`. The controller is non-preemptive and
+queued: `INTC_ACK` returns the highest pending+enabled line, moves it
+`PENDING -> ACTIVE`, and `INTC_CLEAR` (write irq number) clears `ACTIVE`.
+`PENDING` is read-only. `ENABLE` gates `ACK` only (pending still records while
+disabled). Raises coalesce: N raises before an ACK yield one pending bit and
+one ACK. Spurious ACK returns `0xFFFFFFFF` and counts nothing; double-ACK of
+the same event returns `0xFFFFFFFF`; `CLEAR` of an out-of-range number is
+ignored and clearing an inactive line is a no-op.
 
 ## 5. Registers
 
@@ -70,8 +79,9 @@ moves it `PENDING -> ACTIVE`, and `INTC_CLEAR` (write irq number) clears
 | 0x0C | CTRL      | RW | 0 | `bit0 ENABLE`. |
 | 0x10 | BAUDDIV   | RW | 0 | Informational only in MVP. |
 
-UART IRQ (line 0, deferred use): MVP does **not** raise UART IRQ; polling
-via `STATUS` is the contract. INTC line 0 is reserved.
+UART IRQ (line 0): raised on RX_VALID completion (loopback byte ready after
+`uart_latency_ticks`). Delivery is gated solely by `INTC.ENABLE` bit 0;
+polling via `STATUS` remains available.
 
 ### 5.2 TIMER (`0x20001000`)
 
@@ -118,8 +128,9 @@ word-aligned, `LEN>0`, multiple of 4, non-overlapping-or-defined-memmove
 | 0x0C | CLEAR | WO | 0 | Write irq number `0..2` to clear `ACTIVE` |
 | 0x10 | ACTIVE | RO | 0 | `bit[n]` acked, not yet cleared |
 
-No priority registers in MVP (fixed order above). Spurious `ACK` returns
-`0xFFFFFFFF` and counts nothing.
+No priority registers (fixed order above). Spurious `ACK` returns
+`0xFFFFFFFF` and counts nothing; double-ACK returns `0xFFFFFFFF`;
+out-of-range `CLEAR` is ignored.
 
 ### 5.5 PERF (`0x20004000`)
 
