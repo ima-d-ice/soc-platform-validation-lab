@@ -1,7 +1,19 @@
-"""DMA engine stub: single transfer only (MVP).
+"""DMA engine: burst transfer + completion/error IRQ (v0.3).
 
-Burst/chained modes are deferred; CTRL.START auto-clears, STATUS sticky
-until next START, memmove semantics for overlap.
+Single channel. CTRL.START auto-clears, STATUS sticky until next START or
+IRQ_CLEAR, memmove semantics for overlap. Burst size is config-only
+(configs/*.yaml `dma_burst`, words per burst); there is no BURST register,
+preserving the register map.
+
+Timing (deterministic):
+  words = LEN/4; bursts = ceil(words / burst)
+  ticks = words * latency_per_word + (bursts - 1) * 1
+The +1 per extra burst is the arbitration overhead. Completion raises INTC
+line 2 iff IRQ_ENABLE was latched at START. Errors are synchronous: the
+failing START sets ERROR + ERR_CODE immediately (no BUSY), raises the IRQ
+iff enabled, and stays sticky until next START or IRQ_CLEAR. Clearing
+requires two steps: DMA.IRQ_CLEAR clears DMA flags; INTC.CLEAR(2) clears
+the pending bit.
 """
 from __future__ import annotations
 
@@ -34,10 +46,12 @@ IRQ_LINE = 2
 
 class Dma:
     def __init__(self, *, sram_base: int, sram_size: int, latency_per_word: int = 1,
+                 burst: int = 4,
                  intc=None, perf=None, mem_reader=None, mem_writer=None):
         self.sram_base = sram_base
         self.sram_size = sram_size
         self.latency_per_word = max(1, latency_per_word)
+        self.burst = max(1, burst)
         self._intc = intc
         self._perf = perf
         # Callables bridging to SRAM without import cycles:
@@ -153,7 +167,8 @@ class Dma:
             return
         self.busy = True
         words = math.ceil(self.length / 4)
-        self._remaining = max(1, words * self.latency_per_word)
+        bursts = math.ceil(words / self.burst)
+        self._remaining = max(1, words * self.latency_per_word + (bursts - 1))
 
     def step(self) -> None:
         if not self.busy:

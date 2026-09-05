@@ -33,12 +33,12 @@ registers:
   TIMER_IRQ_STATUS: {base: TIMER, offset: 0x0C, access: RW, reset: 0x00000000, desc: "bit0 FIRED (W1C: write 1 to clear)"}
   TIMER_IRQ_CLEAR:  {base: TIMER, offset: 0x10, access: WO, reset: 0x00000000, desc: "bit0: write 1 to clear FIRED"}
 
-  DMA_SRC:       {base: DMA, offset: 0x00, access: RW, reset: 0x00000000, desc: "source byte address (must be in SRAM, word-aligned for MVP)"}
-  DMA_DST:       {base: DMA, offset: 0x04, access: RW, reset: 0x00000000, desc: "destination byte address (must be in SRAM, word-aligned for MVP)"}
+  DMA_SRC:       {base: DMA, offset: 0x00, access: RW, reset: 0x00000000, desc: "source byte address (must be in SRAM, word-aligned)"}
+  DMA_DST:       {base: DMA, offset: 0x04, access: RW, reset: 0x00000000, desc: "destination byte address (must be in SRAM, word-aligned)"}
   DMA_LEN:       {base: DMA, offset: 0x08, access: RW, reset: 0x00000000, desc: "transfer length in bytes (multiple of 4, >0)"}
-  DMA_CTRL:      {base: DMA, offset: 0x0C, access: RW, reset: 0x00000000, desc: "bit0 START (write 1 to start; auto-clears), bit1 IRQ_ENABLE"}
-  DMA_STATUS:    {base: DMA, offset: 0x10, access: RO, reset: 0x00000000, desc: "bit0 BUSY, bit1 DONE (sticky till next START), bit2 ERROR"}
-  DMA_IRQ_CLEAR: {base: DMA, offset: 0x14, access: WO, reset: 0x00000000, desc: "write 1 to clear DONE/ERROR IRQ"}
+  DMA_CTRL:      {base: DMA, offset: 0x0C, access: RW, reset: 0x00000000, desc: "bit0 START (write 1 to start; auto-clears), bit1 IRQ_ENABLE (latched; completion+error raise line 2)"}
+  DMA_STATUS:    {base: DMA, offset: 0x10, access: RO, reset: 0x00000000, desc: "bit0 BUSY, bit1 DONE (sticky till next START/IRQ_CLEAR), bit2 ERROR"}
+  DMA_IRQ_CLEAR: {base: DMA, offset: 0x14, access: WO, reset: 0x00000000, desc: "write 1 to clear DONE/ERROR flags (then INTC.CLEAR(2) for pending)"}
   DMA_ERR_CODE:  {base: DMA, offset: 0x18, access: RO, reset: 0x00000000, desc: "0 none, 1 invalid address, 2 misaligned, 3 bad length"}
 
   INTC_ENABLE:  {base: INTC, offset: 0x00, access: RW, reset: 0x00000000, desc: "bit[n] enables irq line n (gates ACK; pending still records)"}

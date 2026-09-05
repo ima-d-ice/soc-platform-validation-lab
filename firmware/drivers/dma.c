@@ -1,6 +1,11 @@
 #include "driver_api.h"
 #include "soc_regs.h"
 
+/* Burst size is platform-config only (configs dir, dma_burst key); no BURST
+ * register. Completion and error both raise the DMA INTC line when
+ * irq_enable is set. Clearing is two-step: dma_clear() clears DMA flags,
+ * then intc_clear(2) clears the pending bit. */
+
 #define SRAM_BASE 0x10000000U
 #define SRAM_SIZE 0x00010000U
 

@@ -1,13 +1,18 @@
-# vlab-soc Specification v0.2 (INTC complete; DMA burst pending)
+# vlab-soc Specification v0.3 (INTC complete; DMA burst)
 
 This is the imaginary silicon's contract. The Python model (`soc/`) and the
 C firmware (`firmware/`) MUST both conform to it. `firmware/include/soc_regs.h`
 is generated from `configs/regs.yaml` by `tools/reggen.py` and matches this
 document.
 
-Status: INTC complete (§4/§5.4, UART RX IRQ). DMA burst/chained modes,
+Status: INTC complete; DMA burst + completion/error IRQ. Chained mode,
 fault-injection behaviour beyond bus errors, and config-sweep characterisation
 are explicitly **deferred**.
+
+Changelog v0.2 -> v0.3: DMA burst timing `ticks = words*latency_per_word +
+(bursts-1)` with `bursts = ceil(words/dma_burst)` (config-only, no new
+registers, no address changes); completion + error IRQs on line 2 with
+two-step clear (DMA.IRQ_CLEAR then INTC.CLEAR).
 
 Changelog v0.1 -> v0.2: UART raises INTC line 0 on RX_VALID completion
 (delivery gated solely by INTC.ENABLE; no new registers, no address changes);
@@ -98,7 +103,7 @@ When it reaches 0: set `FIRED=1`, raise INTC line 1 if `IRQ_ENABLE=1`;
 if `PERIODIC=1` reload `VALUE=LOAD`, else `ENABLE` auto-clears (one-shot).
 Software clears via `IRQ_STATUS` W1C or `IRQ_CLEAR`.
 
-### 5.3 DMA (`0x20002000`) — single transfer only
+### 5.3 DMA (`0x20002000`) — burst transfer
 
 | Offset | Name | Access | Reset | Meaning |
 |--------|------|--------|-------|---------|
@@ -107,16 +112,20 @@ Software clears via `IRQ_STATUS` W1C or `IRQ_CLEAR`.
 | 0x08 | LEN | RW | 0 | Length in bytes |
 | 0x0C | CTRL | RW | 0 | `bit0 START`, `bit1 IRQ_ENABLE` |
 | 0x10 | STATUS | RO | 0 | `bit0 BUSY`, `bit1 DONE`, `bit2 ERROR` |
-| 0x14 | IRQ_CLEAR | WO | 0 | Write 1 clears DONE/ERROR + deasserts IRQ |
+| 0x14 | IRQ_CLEAR | WO | 0 | Write 1 clears DONE/ERROR flags (does NOT clear INTC pending) |
 | 0x18 | ERR_CODE | RO | 0 | `0 none, 1 invalid addr, 2 misaligned, 3 bad length` |
 
 Contract: software programs `SRC/DST/LEN`, writes `START=1` (`CTRL` auto-clears
-`START`, sets `BUSY`, clears `DONE/ERROR`). Transfer completes over
-`ceil(LEN/4) * dma_latency_per_word_ticks` ticks (see `configs/base.yaml`),
-then `BUSY=0`, `DONE=1` (or `ERROR=1` + code), `DMA_BYTES += LEN` on success,
-INTC line 2 raised if `IRQ_ENABLE=1`. MVP validates `SRC/DST` in SRAM,
-word-aligned, `LEN>0`, multiple of 4, non-overlapping-or-defined-memmove
-(model uses memmove semantics). Burst/chained modes deferred.
+`START`, sets `BUSY`, clears `DONE/ERROR`). Burst size comes from platform
+config `dma_burst` (words per burst; no BURST register). Transfer completes over
+`words * dma_latency_per_word_ticks + (bursts - 1)` ticks where
+`words = LEN/4`, `bursts = ceil(words/dma_burst)` (see `configs/base.yaml`),
+then `BUSY=0`, `DONE=1` (or synchronous `ERROR=1` + code on validation
+failure with no `BUSY` phase), `DMA_BYTES += LEN` on success, INTC line 2
+raised on DONE *and* on ERROR iff `IRQ_ENABLE` was set at `START`.
+Validation: `SRC/DST` in SRAM, word-aligned, `LEN>0`, multiple of 4;
+overlap uses memmove semantics. Clearing is two-step: `DMA.IRQ_CLEAR` clears
+DMA flags, then `INTC.CLEAR(2)` clears the pending bit. Chained mode deferred.
 
 ### 5.4 INTC (`0x20003000`)
 

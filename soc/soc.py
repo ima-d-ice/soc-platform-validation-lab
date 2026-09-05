@@ -53,6 +53,7 @@ class SoC:
             sram_base=SRAM_BASE,
             sram_size=sram_size,
             latency_per_word=int(config.get("dma_latency_per_word_ticks", 1)),
+            burst=int(config.get("dma_burst", 4)),
             intc=self.intc,
             perf=self.perf,
             mem_reader=self._sram_read_bytes,
