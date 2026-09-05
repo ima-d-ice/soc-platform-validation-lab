@@ -45,9 +45,15 @@ parameters, and there is no contention, caches, silicon, or kernel.
 
 ## What firmware/drivers were implemented
 
-* C firmware (host-native via CMake): boot (`.data`/`.bss`, self-check),
-  UART/timer/DMA/INTC drivers against the generated register header,
-  MMIO shim, smoke-tested app.
+* C firmware (host-native via CMake, `-Wall -Wextra -Werror`, CTest):
+  HAL with volatile register access + bit helpers + critical sections;
+  UART/timer/DMA/INTC drivers on the HAL; dispatched ISR framework with
+  vector table; interrupt-driven DMA state machine
+  (IDLE→STARTING→ACTIVE→COMPLETE→ERROR→RECOVERY); boot sequencing with
+  `.data`/`.bss` + self-check; event-driven demo app with ordered
+  bring-up and error recovery. See `docs/firmware-c.md` for what is real
+  C vs host behavior (dispatched-not-preemptive IRQs, shim registers,
+  engine stand-ins in tests only).
 * Python RTOS scheduler (`rtos/`): priority-preemptive tasks, queues,
   notifications, mutexes, delays/periodic waits; Acquisition, Processing,
   Telemetry, Diagnostic tasks.

@@ -656,3 +656,24 @@ Results never committed (gitignored), code always green at each commit.”
 
 *End. Re-verify any `file:line` you quote against `main` before the
 interview — refs drift as code evolves.*
+
+## Addendum — C pivot (firmware deepened after Phase 8)
+
+* `firmware/include/hal.h` + `hal/hal.c`: volatile `read_reg`/`write_reg`,
+  `set/clear/modify_bits`, `irq_disable/restore` (host: nesting counter;
+  silicon path: PRIMASK asm, compiled only without `VLAB_HOST_SIM`).
+  All drivers refactored onto it — say “one door for all register access.”
+* `firmware/include/isr.h` + `isr/isr.c`: vector table, `isr_register`,
+  bounded `isr_dispatch` (ACK → handler → CLEAR, unregistered lines still
+  cleared so nothing wedges). Dispatched on host, stated openly.
+* `drivers/dma.c`: interrupt-driven lifecycle
+  IDLE→STARTING→ACTIVE→COMPLETE→ERROR→RECOVERY with volatile flags,
+  critical sections, two-step clear inside the ISR; `dma_is_complete()`
+  polls the flag with zero bus traffic.
+* `drivers/mmio.c` now emulates INTC ACK priority + BUSY-on-START and
+  exposes `vlab_test_*` hooks (tests/demo only) — say exactly that.
+* `apps/isr_demo.c`: ordered bring-up with failure codes, complete leg,
+  forced-error leg, recovery leg, `DEMO OK` gate in CTest.
+* CTest now 5 suites: smoke, `hal_unit`, `drivers_unit`, `isr_unit`,
+  `isr_demo_fw`. New volatile/ISR/race interview material is in
+  `docs/firmware-c.md` (“Interview map”).

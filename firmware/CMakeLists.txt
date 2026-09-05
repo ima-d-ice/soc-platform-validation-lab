@@ -31,8 +31,13 @@ target_compile_definitions(vlab_drivers PUBLIC VLAB_HOST_SIM)
 add_executable(firmware apps/main.c)
 target_link_libraries(firmware PRIVATE vlab_drivers)
 
+add_executable(isr_demo apps/isr_demo.c)
+target_link_libraries(isr_demo PRIVATE vlab_drivers)
+
 enable_testing()
 add_test(NAME firmware_smoke COMMAND firmware)
+add_test(NAME isr_demo_fw COMMAND isr_demo)
+set_tests_properties(isr_demo_fw PROPERTIES PASS_REGULAR_EXPRESSION "DEMO OK")
 
 add_executable(test_hal tests/test_hal.c)
 target_link_libraries(test_hal PRIVATE vlab_drivers)
