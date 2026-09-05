@@ -124,7 +124,10 @@ then `BUSY=0`, `DONE=1` (or synchronous `ERROR=1` + code on validation
 failure with no `BUSY` phase), `DMA_BYTES += LEN` on success, INTC line 2
 raised on DONE *and* on ERROR iff `IRQ_ENABLE` was set at `START`.
 Validation: `SRC/DST` in SRAM, word-aligned, `LEN>0`, multiple of 4;
-overlap uses memmove semantics. Clearing is two-step: `DMA.IRQ_CLEAR` clears
+overlap uses memmove semantics. A post-START address change bypasses
+START-time validation: completion I/O faults convert to `ERROR=1` +
+`ERR_CODE=1` deterministically (found via validation probe, Phase 7).
+Clearing is two-step: `DMA.IRQ_CLEAR` clears
 DMA flags, then `INTC.CLEAR(2)` clears the pending bit. Chained mode deferred.
 
 ### 5.4 INTC (`0x20003000`)

@@ -47,6 +47,21 @@ latency 107.2 → 57.1 ticks; load knee between proc-4/proc-8 vs a 9-tick
 deadline; queue depth trades 19→0 drops against 0%→87.5% miss rate;
 periodic wakes exact except overloaded P-10 (jitter 1.43).
 
+## Linux platform (`benchmarks/linux_platform.py`, see `docs/linux-platform.md`)
+
+```bash
+python3 benchmarks/linux_platform.py \
+  --config configs/base.yaml \
+  --sizes 64,256,1024,4096,16384 \
+  --reps 5 \
+  --out results/linux_platform.json
+python3 tools/plot_linux.py --input results/linux_platform.json
+```
+
+REAL OBSERVATIONS: depth-1 halves throughput (~1.6 vs ~3.2 B/tick);
+polling vs notification identical ticks, reads-vs-IRQ tradeoff; throughput
+converges to ~3.2 B/tick; zero mismatches in all 200 cells.
+
 ## Fault injection (`benchmarks/fault_injection.py`, see `docs/fault-injection.md`)
 
 ```bash

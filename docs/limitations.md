@@ -30,3 +30,11 @@ performance oracle for any physical system.
    hardware, no ISR-driven preemption, no priority inheritance, and charges
    zero ticks per context switch. Relative scheduling comparisons inside
    the model are valid; absolute latency claims are not.
+9. **Linux layer is userspace, not kernel.** `linux/` never runs in kernel
+   mode, uses no syscalls/headers, has no IOMMU, caches, or concurrent bus
+   masters. It validates driver *structure* (layering, completion paths,
+   error handling) and relative tradeoffs, not kernel performance.
+10. **Single DMA channel.** Pipelining is descriptor queueing, not overlapped
+   transfers; ring depth absorbs producer bursts but cannot overlap engine
+   time. The 32KB driver arena caps 16KB rows to two buffers (documented
+   in the JSON-driving code and visible as flat queue-depth lines).

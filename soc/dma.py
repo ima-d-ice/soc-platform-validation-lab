@@ -182,10 +182,21 @@ class Dma:
         self._remaining -= 1
         if self._remaining > 0:
             return
-        # Complete with memmove semantics.
+        # Complete with memmove semantics. A post-START address change
+        # bypasses START-time validation, so completion I/O faults convert
+        # to ERROR/ERR_ADDR deterministically instead of escaping the tick.
         assert self._reader is not None and self._writer is not None
-        payload = self._reader(self.src, self.length)
-        self._writer(self.dst, payload)
+        try:
+            payload = self._reader(self.src, self.length)
+            self._writer(self.dst, payload)
+        except BusError:
+            self.busy = False
+            self.done = False
+            self.error = True
+            self.err_code = ERR_ADDR
+            if self._irq_enable_latched and self._intc is not None:
+                self._intc.raise_irq(IRQ_LINE)
+            return
         self.busy = False
         self.done = True
         self.error = False

@@ -82,6 +82,14 @@ python3 benchmarks/rtos_scheduling.py \
   --reps 5 \
   --out results/rtos_scheduling.json
 python3 tools/plot_rtos.py --input results/rtos_scheduling.json
+
+# Phase-7 Linux platform (model ticks; userspace driver model; gitignored)
+python3 benchmarks/linux_platform.py \
+  --config configs/base.yaml \
+  --sizes 64,256,1024,4096,16384 \
+  --reps 5 \
+  --out results/linux_platform.json
+python3 tools/plot_linux.py --input results/linux_platform.json
 ```
 
 See `docs/soc-spec.md` for the memory map and register contract.
@@ -120,4 +128,13 @@ between proc-4 and proc-8 against a 9-tick deadline (100% miss from
 proc-8); queue depth trades drops (19→0) against miss rate (0%→87.5%);
 periodic wakes exact except overloaded P-10 (jitter 1.43, 100% miss).
 
-Deferred: config sweeps, Linux.
+Phase-7 Linux platform (see `docs/linux-platform.md`; userspace driver
+model, explicitly not a kernel driver): deeper rings raise e2e latency
+while absorbing bursts; depth-1 halves throughput (~1.6 vs ~3.2 B/tick);
+polling vs notification take identical ticks here and differ only in
+handling (STATUS reads vs 1 IRQ + 3 MMIO ops); throughput converges to
+~3.2 B/tick; zero data mismatches in all 200 cells. Found and fixed one
+genuine model bug: post-START SRC corruption now surfaces as ERR_ADDR
+instead of escaping the tick loop.
+
+Deferred: config sweeps.
