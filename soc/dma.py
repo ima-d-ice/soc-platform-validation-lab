@@ -68,6 +68,9 @@ class Dma:
         self.err_code = ERR_NONE
         self._remaining = 0
         self._irq_enable_latched = False
+        # Fault hook (Phase 5): when True, a BUSY transfer never counts down
+        # (stuck-busy). Default off; reset clears it. No register change.
+        self.fault_stuck_busy = False
 
     def reset(self) -> None:
         self.src = 0
@@ -80,6 +83,7 @@ class Dma:
         self.err_code = ERR_NONE
         self._remaining = 0
         self._irq_enable_latched = False
+        self.fault_stuck_busy = False
 
     # -- validation --
     def _in_sram(self, addr: int, length: int) -> bool:
@@ -173,6 +177,8 @@ class Dma:
     def step(self) -> None:
         if not self.busy:
             return
+        if self.fault_stuck_busy:
+            return  # stuck-busy fault: countdown frozen, stays BUSY
         self._remaining -= 1
         if self._remaining > 0:
             return

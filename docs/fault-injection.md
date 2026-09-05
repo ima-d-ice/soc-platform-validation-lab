@@ -1,0 +1,166 @@
+# Fault Injection + Pre-Silicon System Validation (Phase 5)
+
+> **Virtual-model disclaimer.** Everything below describes the host-native
+> behavioral virtual SoC in this repository. Nothing here is ARM hardware,
+> MCU DMA timing, silicon performance, bus bandwidth, or real interrupt
+> latency. All tick/latency numbers are model ticks.
+
+Core question: *how does system software behave when SoC peripherals or
+system resources fail, and how quickly/correctly does the platform detect
+and recover?*
+
+Metric classes used throughout:
+
+| Class | Meaning | Examples |
+|---|---|---|
+| **measured** | Directly observed from `soc.ticks`, PERF counters, registers, trace | injection/detection/recovery tick, IRQ_COUNT, MEM_ACC, STALLS, STATUS bits |
+| **derived** | Arithmetic on measured values | detection/recovery latency, throughput, crossover |
+| **modeled** | Behavior defined by the virtual model | stuck-busy freeze, timeout budgets, CPU wait ticks |
+
+## 1. Why fault injection exists
+
+Pre-silicon validation must cover not only the happy path but the failure
+modes software will meet on real hardware: bad descriptors, hung engines,
+stuck peripherals, interrupt floods, illegal accesses, and resets landing
+mid-activity. This phase makes those failures deterministic, injectable at
+precise model ticks/events, and measurable in detection/recovery latency.
+
+## 2. Fault model
+
+* Faults are **deterministic and reproducible**: same scenario → identical
+  ticks, counters, and final state (verified by repetition tests).
+* Faults are injected at precise **model ticks** (`apply_at_tick`) or
+  **deterministic events** (`apply_at_event`, e.g. “when DMA becomes BUSY”).
+  No wall-clock sleeps, no randomness.
+* Faults are **additive latches** on top of the model: default off, so every
+  Phase-1–4 test behaves bit-identically with the injector present.
+* Detection uses **model-tick budgets** (validation-side timeouts), and
+  recovery reuses **existing semantics only** (two-step DMA clear, INTC
+  ACK/CLEAR, peripheral reset). No new registers, no new IRQ mechanism.
+
+## 3. Fault taxonomy (intended behavior — defined before implementation)
+
+| Fault | Injection | Intended behavior |
+|---|---|---|
+| `dma-invalid-src` | Program SRC outside SRAM, START | Synchronous ERROR + ERR_CODE=1, no BUSY phase, no memory touched, IRQ iff enabled at START |
+| `dma-invalid-dst` | Program DST outside SRAM, START | Same as above |
+| `dma-timeout` (stuck BUSY) | Valid START, then latch stuck-busy | BUSY frozen (countdown suspended), DONE never sets; validation budget expires → detect; abort via `dma.reset()` + re-init + two-step clear → idle |
+| `uart-stuck-busy` | TX, then latch stuck-busy | STATUS stays BUSY, RX_VALID never sets, no completion IRQ; validation budget expires → detect; clear latch → completes normally |
+| `irq-storm-timer` | N rapid TIMER raises pre-ACK | PENDING coalesces to one bit; exactly one logical ACK; IRQ_COUNT +1; priority intact |
+| `irq-storm-mixed` | UART + TIMER + DMA pending together | ACK order strictly 1, 2, 0; unrelated bits never cleared |
+| `mmio-unmapped-read/write` | Access 0x30000000-class address | `BusError` + STALLS +1 (spec §3) |
+| `mmio-ro-write` / `mmio-wo-read` | Illegal direction access | `BusError` + STALLS +1 (spec §3) |
+| `mmio-bad-offset` | Valid base + invalid offset | `BusError` + STALLS +1 |
+| `timer-reset-pending` | `reset_peripherals()` while TIMER IRQ pending/fired | All peripherals return to documented reset values; PENDING/ACTIVE cleared; software re-inits and resumes |
+| `reset-during-dma` | `reset_peripherals()` while DMA BUSY | DMA returns to idle (BUSY/DONE/ERROR cleared); partial transfer discarded; software re-runs and completes |
+
+Out-of-range `INTC.CLEAR` writes remain ignored (no fault), clearing an
+inactive line stays a no-op, and nested/preemptive IRQ behavior is *not*
+introduced — storms queue per the documented non-preemptive semantics.
+
+## 4. Injection mechanism
+
+`soc/faults.py` provides `Fault` (name + params) and `FaultInjector` with
+`inject / clear / is_active / apply_at_tick / apply_at_event`. The harness
+calls `injector.poll(soc)` after every `soc.step()`; scheduled faults fire
+when `soc.ticks` reaches the target tick or when the event predicate first
+holds. Stuck faults (`dma-timeout`, `uart-stuck-busy`) set additive latches
+in the DMA/UART models; all other faults are pure stimulus sequences through
+the existing MMIO/bus interface.
+
+## 5. Recovery model (validation level)
+
+Small explicit state machine, not a safety framework:
+
+```text
+NORMAL → FAULT_DETECTED → RECOVERY → RECOVERED
+                              ↘ UNRECOVERABLE
+```
+
+Each run records `current_state, fault_type, fault_time (measured),
+detection_time (measured), recovery_time (measured), final_state`, with
+latencies derived by subtraction. Recovery never invents hardware: DMA abort
+= `dma.reset()` + re-init + two-step clear; UART = unlatch + drain; storms =
+ordered ACK drain; resets = re-init per the existing reset contract. A fault
+may legally end UNRECOVERABLE only if the model defines no recovery path;
+all Phase-5 faults define one, and tests assert the defined outcome — never
+“recovery must always succeed” as a blanket rule.
+
+## 6. Measurement methodology
+
+```bash
+python3 benchmarks/fault_injection.py \
+  --config configs/base.yaml \
+  --faults dma-invalid,dma-timeout,uart-stuck,irq-storm,mmio-invalid \
+  --reps 5 \
+  --out results/fault_injection.json
+python3 tools/plot_faults.py --input results/fault_injection.json
+```
+
+11 cases x 5 reps = 55 runs, each from a fresh `SoC` + `boot()`. Timeout
+budgets are modeled parameters recorded per run (`timeout_budget_ticks`):
+DMA timeout 76 ticks (4x the healthy 64B transfer), UART stuck 20 ticks
+(4x UART latency), storms observed over fixed step windows, MMIO synchronous
+(latency 0). Reset faults (`timer-reset`, `reset-during-dma`) are harness-
+capable (`--faults timer-reset,reset-during-dma`, verified deterministic)
+and covered by `validation/faults/test_reset_faults.py`. Plots
+(`results/plots/f1..f7`, gitignored) render rep means from the JSON.
+
+## 7. Results
+
+REAL OBSERVATIONS — `configs/base.yaml`, 5 reps per fault, bit-identical
+across reps (`deterministic_across_reps: true`):
+
+| fault | det (ticks) | rec (ticks) | final | irq total | origin of IRQs |
+|---|---|---|---|---|---|
+| dma-invalid-src | 2 | 0 | 5x RECOVERED | 5 | 1/run: synchronous ERROR IRQ (enabled) |
+| dma-invalid-dst | 2 | 0 | 5x RECOVERED | 0 | none (IRQ not enabled in this case) |
+| dma-timeout | 76 | 0 | 5x RECOVERED | 5 | 1/run from the post-recovery health transfer, not the fault |
+| uart-stuck | 20 | 5 | 5x RECOVERED | 0 | UART completion IRQ arrives only after recovery; harness drains via STATUS |
+| irq-storm-timer | 20 | 0 | 5x RECOVERED | 5 | 1/run: single coalesced ACK |
+| irq-storm-mixed | 5 | 0 | 5x RECOVERED | 15 | 3/run: ordered ACKs 1, 2, 0 |
+| mmio x5 cases | 0 | 0 | 5x RECOVERED each | 0 | none; each rejection adds 1 STALLS tick |
+
+Reset cases (harness-verified): `timer-reset` det 0 / rec 4 ticks (re-fire
+LOAD=4); `reset-during-dma` det 0 / rec 319 ticks (full 1KB re-transfer).
+`destination_match` true in all 55 runs; guard words intact; boot benchmark
+unchanged at 5 ticks.
+
+## 8. Observed failure/recovery behavior
+
+* REAL OBSERVATION: invalid DMA addresses fail synchronously (ERROR +
+  ERR_CODE=1, no BUSY phase) and never touch SRAM — guards and destination
+  regions read back intact.
+* REAL OBSERVATION: stuck faults freeze exactly one thing (DMA countdown /
+  UART busy bit); everything else keeps stepping (ticks advance, timers
+  fire), which is why budget-based detection works.
+* REAL OBSERVATION: storms coalesce — 10 timer periods in 20 ticks yield one
+  pending bit and one counted ACK; mixed-storm ACK order is always 1, 2, 0
+  and each ACK leaves unrelated pending bits intact.
+* REAL OBSERVATION: aborts are combinational in this model (recovery
+  latency 0 for register-clear recoveries); only re-executed work costs
+  ticks (UART re-complete 5, DMA 1KB re-run 319).
+* MODEL BEHAVIOR: recovery latency 0 must not be read as “instant silicon
+  recovery” — MMIO writes cost no ticks in this model by design.
+* DERIVED METRIC: latencies are tick subtractions; speedups/avoidance are
+  not computed here because fault runs have no happy-path baseline per run
+  (see Phase-4 docs for the performance baseline).
+
+## 9. Limitations
+
+* Stuck faults are single-latch freezes, not degraded-performance modes;
+  there is no flaky/intermittent fault class.
+* No fault reaches UNRECOVERABLE in this matrix — the branch is unit-tested
+  in `test_fault_recovery.py` but has no model-defined instance yet.
+* Detection budgets are chosen, not learned; a too-small budget would false-
+  positive on a slow healthy transfer (budgets are recorded per run so this
+  is auditable).
+* Reset faults are test-covered and harness-runnable but excluded from the
+  gate JSON to keep the specified CLI matrix exact.
+* As throughout: model ticks only — no silicon conclusions.
+
+## 10. Virtual-model disclaimer
+
+Repeated for emphasis: host-native behavioral model; tick counts and
+latencies characterize *this model under the stated config*, not any
+physical SoC. Do not quote these numbers as hardware data.

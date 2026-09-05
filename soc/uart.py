@@ -35,6 +35,9 @@ class Uart:
         self._rxdata = 0
         self._busy = 0  # ticks remaining
         self._rx_valid = False
+        # Fault hook (Phase 5): when True, the busy countdown never advances
+        # (stuck-busy). Default off; reset clears it. No register change.
+        self.fault_stuck_busy = False
 
     def reset(self) -> None:
         self.ctrl = 0
@@ -43,6 +46,7 @@ class Uart:
         self._rxdata = 0
         self._busy = 0
         self._rx_valid = False
+        self.fault_stuck_busy = False
 
     def _status(self) -> int:
         s = 0
@@ -92,6 +96,8 @@ class Uart:
 
     def step(self) -> None:
         if self._busy > 0:
+            if self.fault_stuck_busy:
+                return  # stuck-busy fault: stays BUSY, never completes
             self._busy -= 1
             if self._busy == 0:
                 self._rxdata = self._txdata

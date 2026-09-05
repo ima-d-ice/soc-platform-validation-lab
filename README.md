@@ -35,8 +35,8 @@ Host (Python) controls the experiment. Firmware (C) behaves as if running on the
 soc/           Python virtual SoC (bus, memory, cpu, intc, timer, uart, dma, perf)
 firmware/      C firmware (boot, drivers, apps) built host-native via CMake
 validation/    pytest harness (boot, dma, interrupts, faults, stress)
-benchmarks/    quantitative experiments (boot time, cpu vs dma later)
-tools/         reggen + reporting helpers
+benchmarks/    quantitative experiments (boot, cpu-vs-dma, fault injection)
+tools/         reggen + plotting + reporting helpers
 configs/       platform configurations (yaml)
 docs/          SoC specification (contract)
 results/       generated artefacts (gitignored)
@@ -67,6 +67,14 @@ python3 benchmarks/cpu_vs_dma.py \
   --reps 5 \
   --out results/cpu_vs_dma_phase4.json
 python3 tools/plot_dma.py --inp results/cpu_vs_dma_phase4.json --outdir results/plots
+
+# Phase-5 fault injection (real measurement from model; results gitignored)
+python3 benchmarks/fault_injection.py \
+  --config configs/base.yaml \
+  --faults dma-invalid,dma-timeout,uart-stuck,irq-storm,mmio-invalid \
+  --reps 5 \
+  --out results/fault_injection.json
+python3 tools/plot_faults.py --input results/fault_injection.json
 ```
 
 See `docs/soc-spec.md` for the memory map and register contract.
@@ -87,4 +95,14 @@ differ only in handling (IRQ: +2 MEM_ACC, 1 IRQ); DMA already wins on ticks
 at the smallest tested size (16B), so no interior crossover was observed;
 bus ops avoided grow from -6 at 16B to +3063 at 16KB (derived).
 
-Deferred: fault injection, config sweeps, FreeRTOS/Linux.
+Phase-5 fault injection (see `docs/fault-injection.md`, same model):
+deterministic fault latches + validation-tick budgets + explicit recovery
+state machine. Measured: invalid DMA fails synchronously with zero
+corruption (det 2 ticks); stuck DMA/UART caught by budgets (76/20 ticks)
+and recovered via abort/unlatch; storms coalesce with strict ACK order
+1, 2, 0; all MMIO violations raise BusError with +1 STALLS; mid-activity
+resets restore documented reset values and re-init succeeds. All 55
+benchmark runs end RECOVERED with byte-identical destinations; no
+UNRECOVERABLE instance exists in this matrix (branch unit-tested only).
+
+Deferred: config sweeps, FreeRTOS/Linux.
