@@ -8,18 +8,27 @@ preserving the register map.
 Timing (deterministic):
   words = LEN/4; bursts = ceil(words / burst)
   ticks = words * latency_per_word + (bursts - 1) * 1
-The +1 per extra burst is the arbitration overhead. Completion raises INTC
-line 2 iff IRQ_ENABLE was latched at START. Errors are synchronous: the
-failing START sets ERROR + ERR_CODE immediately (no BUSY), raises the IRQ
-iff enabled, and stays sticky until next START or IRQ_CLEAR. Clearing
-requires two steps: DMA.IRQ_CLEAR clears DMA flags; INTC.CLEAR(2) clears
-the pending bit.
+The +1 per extra burst is the arbitration overhead. Completion raises the
+configured INTC line iff IRQ_ENABLE was latched at START. Errors are
+synchronous: the failing START sets ERROR + ERR_CODE immediately (no
+BUSY), raises the IRQ iff enabled, and stays sticky until next START or
+IRQ_CLEAR. Clearing requires two steps: DMA.IRQ_CLEAR clears DMA flags;
+INTC.CLEAR clears the pending bit.
+
+Validation is capability-driven (see soc/dma_caps.py): alignment, length,
+and max_transfer come from DmaCaps; endpoint regions come from the
+platform region table. Error split: ERR_LEN/ERR_ALIGN/ERR_ADDR mean
+invalid driver-API use; ERR_UNSUPPORTED(4, additive) means a mapped
+endpoint or length outside this DMA's platform capabilities.
 """
 from __future__ import annotations
 
 import math
 
 from .bus import BusError
+from .dma_caps import (ERR_UNSUPPORTED, DmaCaps, dma_direction_supported,
+                       endpoint_type)
+from .memory import PERM_R, PERM_W, SRAM, MemoryRegion
 
 SRC_OFF = 0x00
 DST_OFF = 0x04
@@ -40,18 +49,31 @@ ERR_NONE = 0
 ERR_ADDR = 1
 ERR_ALIGN = 2
 ERR_LEN = 3
+# ERR_UNSUPPORTED (=4) is imported from soc/dma_caps.py and re-exported here.
 
-IRQ_LINE = 2
+IRQ_LINE = 2  # default; SoC passes the platform IRQ map line instead
+
+
+def _default_regions(sram_base: int, sram_size: int) -> list[MemoryRegion]:
+    return [MemoryRegion("sram", sram_base, sram_size, SRAM,
+                         PERM_R | PERM_W)]
 
 
 class Dma:
     def __init__(self, *, sram_base: int, sram_size: int, latency_per_word: int = 1,
                  burst: int = 4,
+                 regions: list[MemoryRegion] | None = None,
+                 caps: DmaCaps | None = None,
+                 irq_line: int = IRQ_LINE,
                  intc=None, perf=None, mem_reader=None, mem_writer=None):
         self.sram_base = sram_base
         self.sram_size = sram_size
         self.latency_per_word = max(1, latency_per_word)
         self.burst = max(1, burst)
+        self.regions = regions if regions is not None else _default_regions(
+            sram_base, sram_size)
+        self.caps = caps if caps is not None else DmaCaps()
+        self.irq_line = irq_line
         self._intc = intc
         self._perf = perf
         # Callables bridging to SRAM without import cycles:
@@ -85,12 +107,7 @@ class Dma:
         self._irq_enable_latched = False
         self.fault_stuck_busy = False
 
-    # -- validation --
-    def _in_sram(self, addr: int, length: int) -> bool:
-        if length <= 0:
-            return False
-        base, top = self.sram_base, self.sram_base + self.sram_size
-        return base <= addr and addr + length <= top
+    # -- validation (capability-driven; order is part of the contract) --
 
     def read(self, offset: int) -> int:
         if offset == SRC_OFF:
@@ -148,7 +165,7 @@ class Dma:
         self.error = True
         self.err_code = code
         if self._irq_enable_latched and self._intc is not None:
-            self._intc.raise_irq(IRQ_LINE)
+            self._intc.raise_irq(self.irq_line)
 
     def _start(self, irq_enable: bool) -> None:
         if self.busy:
@@ -159,15 +176,26 @@ class Dma:
         self.done = False
         self.error = False
         self.err_code = ERR_NONE
-        # Validate.
-        if self.length == 0 or self.length % 4 != 0:
+        align = max(1, self.caps.alignment)
+        # Invalid driver-API use first: length, alignment.
+        if self.length == 0 or (align > 1 and self.length % align != 0):
             self._fail(ERR_LEN)
             return
-        if self.src % 4 != 0 or self.dst % 4 != 0:
+        if align > 1 and (self.src % align != 0 or self.dst % align != 0):
             self._fail(ERR_ALIGN)
             return
-        if not self._in_sram(self.src, self.length) or not self._in_sram(self.dst, self.length):
+        # Platform limits next: max transfer, then endpoint support.
+        if (self.caps.max_transfer is not None
+                and self.length > self.caps.max_transfer):
+            self._fail(ERR_UNSUPPORTED)
+            return
+        src_type = endpoint_type(self.regions, self.src, self.length)
+        dst_type = endpoint_type(self.regions, self.dst, self.length)
+        if src_type is None or dst_type is None:
             self._fail(ERR_ADDR)
+            return
+        if not dma_direction_supported(self.caps, src_type, dst_type):
+            self._fail(ERR_UNSUPPORTED)
             return
         self.busy = True
         words = math.ceil(self.length / 4)
@@ -195,7 +223,7 @@ class Dma:
             self.error = True
             self.err_code = ERR_ADDR
             if self._irq_enable_latched and self._intc is not None:
-                self._intc.raise_irq(IRQ_LINE)
+                self._intc.raise_irq(self.irq_line)
             return
         self.busy = False
         self.done = True
@@ -203,4 +231,4 @@ class Dma:
         if self._perf is not None:
             self._perf.count_dma(self.length)
         if self._irq_enable_latched and self._intc is not None:
-            self._intc.raise_irq(IRQ_LINE)
+            self._intc.raise_irq(self.irq_line)

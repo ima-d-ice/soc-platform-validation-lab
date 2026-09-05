@@ -9,21 +9,14 @@ from .bus import BusError
 from .cpu import Cpu
 from .dma import Dma
 from .interrupts import Intc
-from .memory import SimpleMemory, default_regions, find_region
+from .memory import SimpleMemory, find_region
 from .perf import Perf
 from .timer import Timer
 from .uart import Uart
-
-ROM_BASE = 0x00000000
-SRAM_BASE = 0x10000000
-UART_BASE = 0x20000000
-TIMER_BASE = 0x20001000
-DMA_BASE = 0x20002000
-INTC_BASE = 0x20003000
-PERF_BASE = 0x20004000
-REGION_SIZE = 0x1000
-
-BOOT_TICKS = 5  # Reset -> ROM -> stack -> .data/.bss -> main
+from platforms.vlab import (BOOT_TICKS, DMA_BASE, INTC_BASE, PERF_BASE,
+                            REGION_SIZE, ROM_BASE, SRAM_BASE, TIMER_BASE,
+                            UART_BASE, vlab_dma_caps, vlab_irq_map,
+                            vlab_regions)
 
 
 def load_config(path: str | pathlib.Path) -> dict:
@@ -40,16 +33,11 @@ class SoC:
         sram_size = int(config.get("sram_size_bytes", 65536))
         self.rom = SimpleMemory(ROM_BASE, rom_size, readonly=True, name="ROM")
         self.sram = SimpleMemory(SRAM_BASE, sram_size, readonly=False, name="SRAM")
-        # Platform memory map as data (CURRENT VLAB PLATFORM). The decoder
-        # below consults this table instead of hard-coded range checks.
-        self.regions = default_regions(
-            ROM_BASE, rom_size, SRAM_BASE, sram_size,
-            [("uart", UART_BASE, REGION_SIZE),
-             ("timer", TIMER_BASE, REGION_SIZE),
-             ("dma", DMA_BASE, REGION_SIZE),
-             ("intc", INTC_BASE, REGION_SIZE),
-             ("perf", PERF_BASE, REGION_SIZE)],
-        )
+        # Platform memory map as data (CURRENT VLAB PLATFORM, owned by
+        # platforms/vlab.py). The decoder consults this table instead of
+        # hard-coded range checks.
+        self.regions = vlab_regions(rom_size, sram_size)
+        self.irq_map = vlab_irq_map()
 
         self.perf = Perf()
         self.intc = Intc(perf=self.perf)
@@ -64,6 +52,10 @@ class SoC:
             sram_size=sram_size,
             latency_per_word=int(config.get("dma_latency_per_word_ticks", 1)),
             burst=int(config.get("dma_burst", 4)),
+            regions=self.regions,
+            caps=vlab_dma_caps(
+                max_transfer=config.get("dma_max_transfer_bytes", 16384)),
+            irq_line=self.irq_map["dma"],
             intc=self.intc,
             perf=self.perf,
             mem_reader=self._sram_read_bytes,
