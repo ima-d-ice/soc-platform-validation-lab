@@ -5,6 +5,7 @@
  * the stack) but the contract (disable IRQs, init PERF, init UART) executes.
  */
 #include "driver_api.h"
+#include "hal.h"
 #include "soc_regs.h"
 
 /* Simulated image markers: .data source in "ROM", .data dest + .bss in RAM. */
@@ -15,10 +16,10 @@ static uint32_t s_ram_bss[8];
 
 int boot_init(void) {
     /* 1. Disable all IRQs during early init. */
-    vlab_mmio_write(VLAB_INTC_ENABLE, 0U);
+    hal_write_reg(VLAB_INTC_ENABLE, 0U);
     /* 2. Reset + enable performance counters. */
-    vlab_mmio_write(VLAB_PERF_CTRL, VLAB_PERF_CTRL_RESET);
-    vlab_mmio_write(VLAB_PERF_CTRL, VLAB_PERF_CTRL_ENABLE);
+    hal_write_reg(VLAB_PERF_CTRL, VLAB_PERF_CTRL_RESET);
+    hal_write_reg(VLAB_PERF_CTRL, VLAB_PERF_CTRL_ENABLE);
     /* 3. .data copy (ROM -> RAM). */
     for (unsigned i = 0; i < 4; i++) s_ram_data[i] = s_rom_data_init[i];
     /* 4. .bss zero. */

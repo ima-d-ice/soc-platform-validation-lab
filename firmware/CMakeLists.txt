@@ -14,6 +14,7 @@ endif()
 
 add_library(vlab_drivers STATIC
   drivers/mmio.c
+  hal/hal.c
   drivers/uart.c
   drivers/timer.c
   drivers/intc.c
@@ -22,8 +23,20 @@ add_library(vlab_drivers STATIC
 )
 target_include_directories(vlab_drivers PUBLIC include)
 
+# Host simulation: MMIO routes to the shim; silicon builds unset this and
+# use volatile pointer dereferences in hal/hal.c.
+target_compile_definitions(vlab_drivers PUBLIC VLAB_HOST_SIM)
+
 add_executable(firmware apps/main.c)
 target_link_libraries(firmware PRIVATE vlab_drivers)
 
 enable_testing()
 add_test(NAME firmware_smoke COMMAND firmware)
+
+add_executable(test_hal tests/test_hal.c)
+target_link_libraries(test_hal PRIVATE vlab_drivers)
+add_test(NAME hal_unit COMMAND test_hal)
+
+add_executable(test_drivers tests/test_drivers.c)
+target_link_libraries(test_drivers PRIVATE vlab_drivers)
+add_test(NAME drivers_unit COMMAND test_drivers)
