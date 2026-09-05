@@ -113,7 +113,14 @@ Software clears via `IRQ_STATUS` W1C or `IRQ_CLEAR`.
 | 0x0C | CTRL | RW | 0 | `bit0 START`, `bit1 IRQ_ENABLE` |
 | 0x10 | STATUS | RO | 0 | `bit0 BUSY`, `bit1 DONE`, `bit2 ERROR` |
 | 0x14 | IRQ_CLEAR | WO | 0 | Write 1 clears DONE/ERROR flags (does NOT clear INTC pending) |
-| 0x18 | ERR_CODE | RO | 0 | `0 none, 1 invalid addr, 2 misaligned, 3 bad length` |
+| 0x18 | ERR_CODE | RO | 0 | `0 none, 1 invalid addr, 2 misaligned, 3 bad length, 4 unsupported by platform` |
+
+> **Additive errata (register map and codes 0–3 frozen):** code `4` reports
+> a mapped endpoint, direction, or length outside the configured DMA
+> capabilities — CURRENT VLAB IMPLEMENTATION never produces it for the
+> previously-tested cases (all VLAB-legal transfers behave exactly as
+> before); GENERAL CONCEPT is the invalid-use vs unsupported-platform
+> split (see `docs/platform-architecture.md`).
 
 Contract: software programs `SRC/DST/LEN`, writes `START=1` (`CTRL` auto-clears
 `START`, sets `BUSY`, clears `DONE/ERROR`). Burst size comes from platform
@@ -123,8 +130,11 @@ config `dma_burst` (words per burst; no BURST register). Transfer completes over
 then `BUSY=0`, `DONE=1` (or synchronous `ERROR=1` + code on validation
 failure with no `BUSY` phase), `DMA_BYTES += LEN` on success, INTC line 2
 raised on DONE *and* on ERROR iff `IRQ_ENABLE` was set at `START`.
-Validation: `SRC/DST` in SRAM, word-aligned, `LEN>0`, multiple of 4;
-overlap uses memmove semantics. A post-START address change bypasses
+Validation order is BUSY → LEN → ALIGN → MAX → ADDR → DIRECTION.
+CURRENT VLAB PLATFORM: `SRC/DST` in SRAM, word-aligned, `LEN>0`, multiple
+of 4, at most 16KB, RAM-to-RAM only; other platforms supply their own
+caps (GENERAL CONCEPT: capability-checked validation). Overlap uses
+memmove semantics. A post-START address change bypasses
 START-time validation: completion I/O faults convert to `ERROR=1` +
 `ERR_CODE=1` deterministically (found via validation probe, Phase 7).
 Clearing is two-step: `DMA.IRQ_CLEAR` clears

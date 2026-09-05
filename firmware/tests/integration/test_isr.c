@@ -18,6 +18,7 @@
 static void reset_all(void) {
     hal_write_reg(VLAB_DMA_IRQ_CLEAR, 1U);
     intc_enable(0U);
+    isr_configure(VLAB_IRQ_COUNT); /* platform default: 3 live lines */
     dma_recover(); /* back to IDLE from any terminal state */
     assert(dma_state() == DMA_S_IDLE);
 }
@@ -117,6 +118,38 @@ static void test_priority_order_on_dispatch(void) {
     intc_enable(0U);
 }
 
+static void test_line_count_configurable(void) {
+    reset_all();
+    intc_enable(0x7U);
+    /* A 2-line platform ignores line 2: no handler runs, and the ACK
+     * read still carries its hardware side effect (PENDING->ACTIVE), so
+     * the IRQ is acknowledged-but-unhandled and ACTIVE must be cleared
+     * explicitly. Lesson: configuring fewer lines than the controller
+     * has can lose IRQs; size the configuration to the hardware. */
+    isr_configure(2U);
+    isr_register(VLAB_IRQ_DMA, record_order);
+    s_n = 0;
+    vlab_test_raise_irq(VLAB_IRQ_DMA);
+    assert(isr_dispatch() == 0);
+    assert(s_n == 0);
+    assert(hal_read_reg(VLAB_INTC_PENDING) == 0U);
+    assert(hal_read_reg(VLAB_INTC_ACTIVE) == (1U << VLAB_IRQ_DMA));
+    hal_write_reg(VLAB_INTC_CLEAR, VLAB_IRQ_DMA);
+    /* Out-of-range counts keep the previous configuration. */
+    isr_configure(0U);
+    isr_configure(99U);
+    assert(isr_dispatch() == 0);
+    /* Back to 3 lines: a freshly raised IRQ dispatches normally. */
+    isr_configure(VLAB_IRQ_COUNT);
+    isr_register(VLAB_IRQ_DMA, record_order);
+    vlab_test_raise_irq(VLAB_IRQ_DMA);
+    s_n = 0;
+    assert(isr_dispatch() == 1);
+    assert(s_n == 1 && s_order[0] == VLAB_IRQ_DMA);
+    isr_register(VLAB_IRQ_DMA, 0);
+    intc_enable(0U);
+}
+
 int main(void) {
     dma_init(); /* VLAB platform defaults */
     test_dispatch_empty();
@@ -125,6 +158,7 @@ int main(void) {
     test_submit_lifecycle_guards();
     test_unregistered_line_still_cleared();
     test_priority_order_on_dispatch();
+    test_line_count_configurable();
     printf("test_isr: all cases passed (dispatched=%u)\n",
            (unsigned)isr_dispatched_count());
     return 0;

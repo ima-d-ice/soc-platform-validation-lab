@@ -17,15 +17,24 @@
 
 #define VLAB_IRQ_COUNT 3U
 
+/* Static vector ceiling (no heap in firmware); the platform configures
+ * how many lines are actually live via isr_configure(). VLAB uses 3. */
+#define ISR_MAX_LINES 8U
+
 typedef void (*isr_handler_t)(uint32_t line);
 
-/* Register (or unregister with NULL) the handler for an IRQ line. */
+/* Install the platform's live line count (1..ISR_MAX_LINES; out-of-range
+ * values keep the previous configuration). Clears all registrations. */
+void isr_configure(uint32_t n_lines);
+
+/* Register (or unregister with NULL) the handler for an IRQ line.
+ * Lines at or above the configured count are silently ignored. */
 void isr_register(uint32_t line, isr_handler_t handler);
 
 /* Dispatch all currently pending+enabled IRQs, highest priority first.
  * Always ACKs and clears each line (even with no handler registered, so a
  * stray IRQ can never wedge the controller). Returns lines handled.
- * Bounded: at most VLAB_IRQ_COUNT dispatches per call. */
+ * Bounded: at most the configured line count dispatches per call. */
 int isr_dispatch(void);
 
 /* Number of dispatched IRQs since boot (for tests/telemetry). */

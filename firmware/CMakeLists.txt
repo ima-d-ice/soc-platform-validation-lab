@@ -23,13 +23,18 @@ add_library(vlab_drivers STATIC
   platforms/vlab/platform_vlab.c
   boot/boot.c
 )
+# HAL backend split: exactly one backend links. Host builds use the
+# simulation backend; silicon (freestanding) builds use volatile MMIO.
+option(VLAB_HOST_SIM "Route HAL through the host bus shim" ON)
+if(VLAB_HOST_SIM)
+  target_sources(vlab_drivers PRIVATE hal/host.c)
+  target_compile_definitions(vlab_drivers PUBLIC VLAB_HOST_SIM)
+else()
+  target_sources(vlab_drivers PRIVATE hal/silicon.c)
+endif()
 # Public headers (driver API, HAL, ISR, caps, regions, generated regs);
 # the firmware root itself is private so drivers reach platforms/ data.
 target_include_directories(vlab_drivers PUBLIC include PRIVATE .)
-
-# Host simulation: MMIO routes to the shim; silicon builds unset this and
-# use volatile pointer dereferences in hal/hal.c.
-target_compile_definitions(vlab_drivers PUBLIC VLAB_HOST_SIM)
 
 add_executable(firmware apps/main.c)
 target_link_libraries(firmware PRIVATE vlab_drivers)

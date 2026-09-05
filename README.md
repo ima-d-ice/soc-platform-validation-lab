@@ -64,10 +64,22 @@ parameters, and there is no contention, caches, silicon, or kernel.
 ## Validation approach
 
 `validation/` (pytest): boot, bus errors, UART, timer, INTC priority,
-DMA correctness/burst, CPU-vs-DMA helpers, fault injection (DMA/UART/
-storm/MMIO/reset/recovery-machine), RTOS core+system, Linux platform —
-fresh SoC + `boot()` per test, destination byte-compare on every data
-path, determinism re-runs, no “must be faster” assumptions.
+DMA correctness/burst/caps, CPU-vs-DMA helpers, fault injection (DMA/UART/
+storm/MMIO/reset/recovery-machine), RTOS core+system, Linux platform,
+memory regions — fresh SoC + `boot()` per test, destination byte-compare
+on every data path, determinism re-runs, no “must be faster” assumptions.
+
+## Repository shape (general mechanisms vs VLAB configuration)
+
+```text
+soc/{cpu,memory,bus}/  soc/peripherals/{uart,timer,dma,intc,perf}/
+platforms/vlab.py                  <- VLAB map, DMA caps, IRQ map
+firmware/{hal,drivers/{uart,timer,dma,intc},isr,platforms/vlab,tests/{unit,integration,fault}}/
+```
+
+See `docs/platform-architecture.md` for the labeled dependency map
+(GENERAL CONCEPT vs PLATFORM CONFIGURATION vs CURRENT VLAB
+IMPLEMENTATION) and the suggested CPU→Validation reading order.
 
 ## Benchmark methodology
 
