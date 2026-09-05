@@ -23,6 +23,7 @@ results/*
 
 # Private local notes (never commit)
 docs/interview-prep.md
+interview-stories.md
 
 # Tooling
 *.log
