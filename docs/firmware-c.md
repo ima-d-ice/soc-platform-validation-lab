@@ -49,3 +49,10 @@ framework, boot sequencing, an event-driven demo app, and CTest unit tests
   section rationale; why ACK precedes CLEAR and what wedges otherwise.
 * Bring-up: why order matters, how `sys_init` codes propagate, what the
   recovery leg proves (ERROR latched with code → recover → clean transfer).
+
+## Future work (not started)
+
+* ARM cross-compile preset (`arm-none-eabi-gcc -ffreestanding`) proving
+  the drivers build freestanding — no ARM toolchain on this machine yet,
+  so no half-added target. The non-`VLAB_HOST_SIM` HAL path is already
+  written for it (volatile pointers, PRIMASK asm).
