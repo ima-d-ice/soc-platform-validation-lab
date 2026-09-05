@@ -32,6 +32,21 @@ REAL OBSERVATIONS: CPU copy costs 3 ticks/word (modeled wait); DMA follows
 polling vs IRQ completion take identical ticks here (+2 MEM_ACC and 1 IRQ
 for the IRQ path); DMA wins on ticks from the smallest tested size (16B).
 
+## RTOS scheduling (`benchmarks/rtos_scheduling.py`, see `docs/rtos.md`)
+
+```bash
+python3 benchmarks/rtos_scheduling.py \
+  --config configs/base.yaml \
+  --reps 5 \
+  --out results/rtos_scheduling.json
+python3 tools/plot_rtos.py --input results/rtos_scheduling.json
+```
+
+REAL OBSERVATIONS: priority swap on identical overload changes mean
+latency 107.2 → 57.1 ticks; load knee between proc-4/proc-8 vs a 9-tick
+deadline; queue depth trades 19→0 drops against 0%→87.5% miss rate;
+periodic wakes exact except overloaded P-10 (jitter 1.43).
+
 ## Fault injection (`benchmarks/fault_injection.py`, see `docs/fault-injection.md`)
 
 ```bash

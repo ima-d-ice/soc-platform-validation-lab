@@ -23,5 +23,10 @@ performance oracle for any physical system.
    matrix yet (branch unit-tested only).
 6. **Capacity bounds.** 64KB SRAM caps single transfers at 16KB; 64KB
    transfers are refused by a fit check rather than worked around.
-7. **Scope bounds.** No FreeRTOS/Linux, no new peripherals, no RTL —
+7. **Scope bounds.** No Linux yet, no new peripherals, no RTL —
    deliberate; the studied surface is platform software + validation.
+8. **RTOS is modeled, not ported.** `rtos/` implements FreeRTOS *scheduling
+   semantics* on model ticks; it is not the FreeRTOS kernel, has no SysTick
+   hardware, no ISR-driven preemption, no priority inheritance, and charges
+   zero ticks per context switch. Relative scheduling comparisons inside
+   the model are valid; absolute latency claims are not.

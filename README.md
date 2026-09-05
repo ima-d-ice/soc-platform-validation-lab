@@ -75,6 +75,13 @@ python3 benchmarks/fault_injection.py \
   --reps 5 \
   --out results/fault_injection.json
 python3 tools/plot_faults.py --input results/fault_injection.json
+
+# Phase-6 RTOS scheduling (model ticks; results gitignored)
+python3 benchmarks/rtos_scheduling.py \
+  --config configs/base.yaml \
+  --reps 5 \
+  --out results/rtos_scheduling.json
+python3 tools/plot_rtos.py --input results/rtos_scheduling.json
 ```
 
 See `docs/soc-spec.md` for the memory map and register contract.
@@ -105,4 +112,12 @@ resets restore documented reset values and re-init succeeds. All 55
 benchmark runs end RECOVERED with byte-identical destinations; no
 UNRECOVERABLE instance exists in this matrix (branch unit-tested only).
 
-Deferred: config sweeps, FreeRTOS/Linux.
+Phase-6 RTOS (see `docs/rtos.md`; deterministic scheduler modeling
+FreeRTOS semantics on the shared SoC tick clock, not the FreeRTOS
+kernel): priority swap on identical overload halves mean latency
+(107.2 → 57.1 ticks) and un-starves telemetry; processing-load knee
+between proc-4 and proc-8 against a 9-tick deadline (100% miss from
+proc-8); queue depth trades drops (19→0) against miss rate (0%→87.5%);
+periodic wakes exact except overloaded P-10 (jitter 1.43, 100% miss).
+
+Deferred: config sweeps, Linux.
