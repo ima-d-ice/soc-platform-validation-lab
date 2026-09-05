@@ -57,6 +57,16 @@ python3 -m pytest validation/ -q
 
 # Boot-time benchmark (real measurement from model)
 python3 benchmarks/boot_time.py --config configs/base.yaml
+
+# Phase-4 DMA study (real measurement from model; results gitignored)
+python3 benchmarks/cpu_vs_dma.py \
+  --config configs/base.yaml \
+  --sizes 16,64,256,1024,4096,16384 \
+  --bursts 1,2,4,8,16 \
+  --completion both \
+  --reps 5 \
+  --out results/cpu_vs_dma_phase4.json
+python3 tools/plot_dma.py --inp results/cpu_vs_dma_phase4.json --outdir results/plots
 ```
 
 See `docs/soc-spec.md` for the memory map and register contract.
@@ -64,8 +74,17 @@ See `docs/soc-spec.md` for the memory map and register contract.
 
 ## Scope
 
-MVP (§1–§5): spec + bus/memory/cpu + UART/Timer + INTC/PERF stubs +
-single-transfer DMA stub + C boot/drivers/app + boot/UART/Timer validation.
+Implemented and validated: spec + bus/memory/cpu + UART/Timer + complete
+deterministic INTC (fixed priority TIMER > DMA > UART, read-to-ack,
+coalesced pending, UART RX IRQ) + burst DMA with completion/error IRQ +
+C boot/drivers/app + boot/UART/Timer/INTC/DMA validation + boot benchmark.
 
-Deferred (placeholders only): priority/nesting, burst/chained DMA, fault
-injection, config sweeps, FreeRTOS/Linux.
+Phase-4 DMA study (see `docs/dma-optimization.md`, all within the virtual
+SoC timing model on `configs/base.yaml`): CPU copy costs 3 ticks/word;
+DMA follows `words*1 + (bursts-1)` ticks; burst 1→16 cuts 16KB DMA ticks
+from 8191 to 4351; polling vs IRQ completion take identical ticks here and
+differ only in handling (IRQ: +2 MEM_ACC, 1 IRQ); DMA already wins on ticks
+at the smallest tested size (16B), so no interior crossover was observed;
+bus ops avoided grow from -6 at 16B to +3063 at 16KB (derived).
+
+Deferred: fault injection, config sweeps, FreeRTOS/Linux.
