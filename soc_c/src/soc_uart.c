@@ -1,9 +1,6 @@
-#include "soc_uart.h"
+#include "soc.h"
 
 #include <string.h>
-
-#include "soc_intc.h"
-#include "soc_perf.h"
 
 void soc_uart_init(soc_uart_t *u, uint32_t latency_ticks,
                    struct soc_perf_t *perf, struct soc_intc_t *intc) {

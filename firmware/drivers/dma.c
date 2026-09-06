@@ -1,7 +1,7 @@
 #include "driver_api.h"
 #include "hal.h"
 #include "isr.h"
-#include "platforms/vlab/platform_vlab.h"
+#include "platform/platform_vlab.h"
 #include "soc_regs.h"
 
 /* DMA consumes platform configuration (memory map, capabilities, and the

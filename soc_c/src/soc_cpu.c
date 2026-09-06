@@ -1,4 +1,4 @@
-#include "soc_cpu.h"
+#include "soc.h"
 
 void soc_cpu_init(soc_cpu_t *c, uint32_t rom_base, uint32_t sram_top) {
     c->rom_base = rom_base;

@@ -1,13 +1,14 @@
-/* HAL host backend: bus-simulation primitives for VLAB_HOST_SIM builds.
+/* HAL host backend: register access into the live SoC model.
  *
- * Register traffic routes to the MMIO shim (drivers/mmio.c), which models
- * reset values, W1C, and START self-clear. Volatile temporaries keep the
- * same read/write discipline as silicon. Critical sections use a nesting
- * counter standing in for the IRQ mask bit.
+ * Register traffic routes through the host bridge (soc_c) into the same
+ * ticking model the tests and benchmarks drive: reset values, W1C,
+ * START self-clear, IRQs, and DMA movement are all real model behavior.
+ * Volatile temporaries keep the same read/write discipline as silicon.
+ * Critical sections use a nesting counter standing in for the IRQ mask bit.
  */
 #include "hal.h"
 
-#include "driver_api.h" /* vlab_mmio_read/write (host bus shim) */
+#include "driver_api.h" /* vlab_mmio_read/write (live model bridge) */
 
 uint32_t hal_read_reg(uint32_t addr) {
     /* Volatile temporary: repeated status polls stay separate loads even

@@ -184,8 +184,9 @@ Reset -> ROM -> startup (stack, .data copy, .bss zero) -> main()
 * `Reset` zeroes CPU state, sets PC to ROM base, enables PERF if configured.
 * Startup is modelled by `soc_boot()`: loads image words into ROM,
   zeroes SRAM, sets SP to SRAM top, marks main entry.
-* C `firmware/boot/boot.c:boot_init()` mirrors this: disables IRQs, inits
-  `.data/.bss` (host-native simulation of the copy/zero), inits PERF,UART.
+* C `firmware/platform/platform_init.c:platform_init()` mirrors this:
+  disables IRQs, inits `.data/.bss` (host-native simulation of the
+  copy/zero), inits PERF,UART.
 * Boot time = ticks from `Reset` to `main` entry; measured by
   the `soc_c_boot_time` tool, not estimated.
 

@@ -18,55 +18,60 @@ interrupts, faults, and recovery, all measured in model ticks.
 ```text
 Application / tests (CTest executables)
     ↓
-C firmware drivers + HAL (boot, UART, timer, DMA, INTC, ISR)
-    ↓  hal/host.c ↔ host_bridge (system tests) · mmio.c shim (unit tests)
-Virtual SoC model in C (soc_c/): CPU / Memory / INTC / Timer / UART / DMA / PERF
+C firmware drivers + HAL (UART, timer, DMA, INTC, ISR, platform_init)
+    ↓  hal/host.c → host bridge → SoC bus (ONE live model for everything)
+Virtual SoC model in C (soc_c/): CPU / Bus / Memory / UART / Timer / INTC / DMA / PERF
     ↓
 Deterministic tick clock: every step() advances peripherals underneath software
 ```
 
 The register map is frozen (`docs/soc-spec.md`,
 `firmware/include/soc_regs.h` — do not hand-edit). Time is integer model
-ticks. The C model (`soc_c/`) is the single source of truth; the Python
-model and harness were removed in the pure-C migration.
+ticks. Map/caps vocabulary (`memory_region`, `dma_caps`, endpoint
+helpers) lives once in `firmware/include/` and is shared by the model,
+the drivers, and the tests.
 
 ## Repository layout
 
 ```text
-soc_c/include|src/   behavioral SoC model (cpu, memory, bus errors,
-                     uart, timer, intc, dma, perf, top-level soc, faults,
-                     host_bridge for firmware linkage)
-soc_c/tests/         CTest suites: boot, bus errors, DMA, DMA burst,
-                     INTC/priority, timer+UART, faults, regions,
-                     firmware_link (drivers on the live model)
-soc_c/bench/         measurement tools: boot_time, cpu_vs_dma (CSV out)
-firmware/hal/        HAL: generic access + RMW + critical sections;
-                     backends host.c (sim) / silicon.c (volatile+PRIMASK)
-firmware/drivers/    UART / timer / DMA / INTC drivers (+ mmio.c host shim
-                     for pure-logic unit tests)
-firmware/isr|boot|platforms|apps|tests/  dispatch, boot, VLAB config, demos
-docs/                spec, architecture, studies, limitations
-configs/             frozen spec data (regs.yaml, base.yaml, fast_mem.yaml)
-results/             gitignored measurement output (see results/.gitkeep)
+soc_c/             behavioral SoC model: soc.h (one header) + cpu, memory,
+                   bus, uart, timer, intc, dma, perf, top-level soc,
+                   host_bridge (firmware linkage)
+soc_c/tests/       boot, bus_errors (+map), endpoints (DMA matrix+burst),
+                   intc, timer_uart, faults, firmware_link (drivers live)
+soc_c/bench/       boot_time, cpu_vs_dma (CSV/JSON metrics to stdout)
+firmware/include/  hal.h, driver_api.h, mem_regions.h, dma_caps.h, isr.h,
+                   soc_regs.h (frozen register map)
+firmware/hal/      hal.c (generic RMW) + host.c (live-model backend)
+firmware/drivers/  uart.c, timer.c, intc.c, dma.c (endpoint-general DMA)
+firmware/isr.c     vector table + bounded dispatch
+firmware/platform/ VLAB config: map, caps, DMA FIFOs, IRQ map, platform_init
+firmware/apps/     main.c (bring-up demo + metrics printout)
+firmware/tests/    unit/ (hal, regions, caps, drivers),
+                   integration/ (isr, dma), fault/ (dma_faults)
+docs/              spec, architecture, studies, limitations
+configs/           frozen spec data (regs.yaml, base.yaml)
+results/           gitignored measurement output
 ```
 
-## Build and test (no Python, no dependencies beyond CMake + C11)
+One root build owns everything (see below). RTOS/Linux ports are
+explicitly future extensions, not part of this tree.
+
+## Build and test (no dependencies beyond CMake + a C11 compiler)
 
 ```bash
-cmake -S soc_c -B soc_c/build && cmake --build soc_c/build
-ctest --test-dir soc_c/build --output-on-failure   # 9 suites: model + firmware link
-
-cmake -S firmware -B firmware/build && cmake --build firmware/build
-ctest --test-dir firmware/build --output-on-failure  # 9 suites: drivers/HAL/ISR/boot
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure   # 15 suites: model + firmware + smoke
 ```
 
 ## Benchmarks
 
 ```bash
-./soc_c/build/soc_c_boot_time
+./build/bench_boot
 # {"boot_ticks": 5, "cpu_frequency_mhz": 100, "boot_ns": 50, ...}
 
-./soc_c/build/soc_c_cpu_vs_dma   # CSV: size,burst,words,bursts,dma_ticks,cpu_ticks
+./build/bench_dma   # CSV: size,burst,words,bursts,dma_ticks,cpu_ticks
 ```
 
 Every run is deterministic: same scenario → identical ticks and

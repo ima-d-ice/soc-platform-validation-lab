@@ -1,26 +1,28 @@
 /* ISR + DMA state-machine tests: dispatch, completion, error, recovery.
  *
  * The host has no preemptive IRQs, so tests raise engine/IRQ events via
- * the mmio.c test hooks and then call isr_dispatch() exactly as a main
+ * the live-model hooks and then call isr_dispatch() exactly as a main
  * loop / tick hook would. Handler logic, flags, ordering, and lifecycle
- * are all real code under test.
+ * are all real code under test. The model is global, so every case starts
+ * from a fresh boot; every case also ends with lifecycle IDLE.
  */
 #include <assert.h>
 #include <stdio.h>
 
 #include "driver_api.h"
 #include "hal.h"
+#include "host_bridge.h"
 #include "isr.h"
 #include "soc_regs.h"
 
 #define SRAM_BASE 0x10000000U
 
 static void reset_all(void) {
-    hal_write_reg(VLAB_DMA_IRQ_CLEAR, 1U);
+    soc_host_boot(); /* engine idle, INTC/UART/PERF at reset values */
+    dma_init();      /* VLAB platform defaults */
     intc_enable(0U);
     isr_configure(VLAB_IRQ_COUNT); /* platform default: 3 live lines */
-    dma_recover(); /* back to IDLE from any terminal state */
-    assert(dma_state() == DMA_S_IDLE);
+    assert(dma_state() == DMA_S_IDLE); /* previous case ended IDLE */
 }
 
 static void test_dispatch_empty(void) {
@@ -151,7 +153,6 @@ static void test_line_count_configurable(void) {
 }
 
 int main(void) {
-    dma_init(); /* VLAB platform defaults */
     test_dispatch_empty();
     test_completion_path();
     test_error_path_and_recover();

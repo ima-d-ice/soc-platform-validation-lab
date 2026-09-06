@@ -3,7 +3,7 @@
  * A memory map is a table of regions; these helpers answer containment,
  * validity, overflow, and overlap for any platform's table. Pure functions
  * implemented static-inline here: no state, no backend, no device logic.
- * PLATFORM CONFIGURATION (e.g. firmware/platforms/vlab/) supplies the
+ * PLATFORM CONFIGURATION (e.g. firmware/platform/) supplies the
  * actual table; CURRENT VLAB IMPLEMENTATION uses ROM/SRAM/MMIO entries.
  */
 #ifndef VLAB_MEM_REGIONS_H

@@ -4,8 +4,8 @@ Controlled experiments **within the virtual SoC timing model** (default
 config mirrors `configs/base.yaml`).
 Nothing here describes ARM hardware, MCU DMA timing, silicon, bus bandwidth,
 or real interrupt latency. All numbers below are produced by
-`soc_c_cpu_vs_dma` against the behavioral C model; the transfer-tick
-tables are verified identical by the `soc_c_dma_burst` CTest.
+`bench_dma` against the behavioral C model; the transfer-tick
+tables are verified identical by the `test_endpoints` CTest.
 
 ## Experiment questions
 
@@ -43,14 +43,14 @@ tables are verified identical by the `soc_c_dma_burst` CTest.
 ## Benchmark methodology
 
 ```bash
-cmake -S soc_c -B soc_c/build && cmake --build soc_c/build
-./soc_c/build/soc_c_cpu_vs_dma   # CSV: size,burst,words,bursts,dma_ticks,cpu_ticks
+cmake -S . -B build && cmake --build build
+./build/bench_dma   # CSV: size,burst,words,bursts,dma_ticks,cpu_ticks
 ```
 
 Fresh `soc_t` + `soc_boot()` per cell; 30 cells (6 sizes x 5 bursts).
 Every cell byte-compares source vs destination (mismatch aborts non-zero).
-Determinism is asserted, not sampled: `soc_c_dma_burst` requires identical
-ticks across repeated runs (the old harness's `deterministic_across_reps`).
+Determinism is asserted, not sampled: `test_endpoints` requires identical
+ticks across repeated runs.
 
 ## REAL OBSERVATIONS (base config, rep 0)
 

@@ -1,9 +1,9 @@
 /* HAL core: device-free read-modify-write helpers over read/write.
  *
  * This file knows nothing about UART/TIMER/DMA/INTC semantics; it only
- * combines the backend primitives below. Backends: hal/host.c (simulated
- * bus) and hal/silicon.c (volatile pointers + PRIMASK); exactly one is
- * linked, selected by VLAB_HOST_SIM in CMake.
+ * combines the backend primitives below. Backend: hal/host.c routes into
+ * the live SoC model (see docs/firmware-c.md for the intended silicon
+ * mapping: volatile pointers + PRIMASK).
  */
 #include "hal.h"
 

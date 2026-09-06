@@ -3,7 +3,7 @@
  * A DMA implementation supports an address-type matrix over a platform's
  * memory map, an alignment, a max transfer, and optional features. Pure
  * helpers implemented static-inline here. PLATFORM CONFIGURATION (e.g.
- * firmware/platforms/vlab/) supplies the concrete DmaCaps, the memory map,
+ * firmware/platform/) supplies the concrete DmaCaps, the memory map,
  * and the DMA-capable peripheral endpoint table; CURRENT VLAB
  * IMPLEMENTATION enables RAM->RAM, RAM->Peripheral and Peripheral->RAM,
  * 4-byte aligned, 16KB max.

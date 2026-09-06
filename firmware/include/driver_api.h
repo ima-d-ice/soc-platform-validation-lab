@@ -7,7 +7,8 @@
 #include "dma_caps.h"
 #include "mem_regions.h"
 
-/* MMIO (host shim in mmio.c; on silicon these are volatile accesses). */
+/* MMIO into the live model (host bridge in soc_c; volatile accesses on
+ * silicon). Implemented once, used by HAL on every path. */
 uint32_t vlab_mmio_read(uint32_t addr);
 void vlab_mmio_write(uint32_t addr, uint32_t val);
 
@@ -91,11 +92,12 @@ void dma_isr(uint32_t line);
 /* ERROR or COMPLETE -> IDLE. Clears flags (two-step) and resets latches. */
 void dma_recover(void);
 
-/* Boot. */
-int boot_init(void);
+/* Platform bring-up (firmware/platform/). */
+int platform_init(void);
+int platform_self_check(void);
 
-/* Host test hooks (tests only, backed by mmio.c): raise an IRQ line,
- * force DMA completion, or force a DMA error with the given code. */
+/* Host test hooks (tests only, backed by the live model): raise an IRQ
+ * line, step a BUSY engine to completion, or latch a DMA error code. */
 void vlab_test_raise_irq(uint32_t line);
 void vlab_test_dma_complete(void);
 void vlab_test_dma_error(uint32_t code);

@@ -1,9 +1,9 @@
-/* CURRENT VLAB PLATFORM: concrete configuration data.
+/* CURRENT VLAB PLATFORM: concrete configuration data + bring-up.
  *
- * PLATFORM CONFIGURATION: the actual VLAB addresses, DMA capabilities, and
- * IRQ assignment. Generic code (drivers, HAL, ISR dispatcher) consumes
- * these tables; nothing outside platforms/ and the generated soc_regs.h
- * may hard-code VLAB addresses or capabilities.
+ * PLATFORM CONFIGURATION: the actual VLAB addresses, DMA capabilities,
+ * DMA-capable FIFOs, IRQ assignment, and platform_init(). Generic code
+ * (drivers, HAL, ISR dispatcher, SoC model) consumes these tables;
+ * nothing else may hard-code VLAB addresses or capabilities.
  */
 #ifndef VLAB_PLATFORM_VLAB_H
 #define VLAB_PLATFORM_VLAB_H

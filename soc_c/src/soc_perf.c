@@ -1,4 +1,4 @@
-#include "soc_perf.h"
+#include "soc.h"
 
 void soc_perf_init(soc_perf_t *p) {
     p->cycles = 0;

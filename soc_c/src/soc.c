@@ -2,26 +2,14 @@
 
 #include <string.h>
 
+#include "platform/platform_vlab.h"
+
 void soc_config_default(soc_config_t *cfg) {
-    cfg->rom_size_bytes = SOC_ROM_SIZE_DEFAULT;
-    cfg->sram_size_bytes = SOC_SRAM_SIZE_DEFAULT;
     cfg->cpu_frequency_mhz = 100;
     cfg->uart_latency_ticks = 5;
     cfg->dma_latency_per_word_ticks = 1;
     cfg->dma_burst = 4;
-    cfg->dma_max_transfer_bytes = 16384;
-    cfg->timer_tick_ticks = 1;
 }
-
-/* VLAB DMA-capable peripheral FIFOs (mirrors firmware
- * platform_vlab.c): UART TX sink + UART RX source, anchored at the
- * existing FIFO registers (no map change). */
-static const soc_dma_periph_ep_t kVlabDmaPeriphs[] = {
-    {"uart-tx", SOC_UART_BASE + SOC_UART_TXDATA_OFF, SOC_DMA_EP_DST},
-    {"uart-rx", SOC_UART_BASE + SOC_UART_RXDATA_OFF, SOC_DMA_EP_SRC},
-};
-#define VLAB_N_DMA_PERIPHS \
-    ((uint32_t)(sizeof(kVlabDmaPeriphs) / sizeof(kVlabDmaPeriphs[0])))
 
 static int soc_dma_reader_bridge(void *ctx, uint32_t addr, uint32_t len,
                                  uint8_t *out) {
@@ -47,70 +35,40 @@ static int soc_dma_writer_bridge(void *ctx, uint32_t addr,
 
 void soc_init(soc_t *s, const soc_config_t *cfg) {
     soc_config_t dflt;
-    soc_dma_caps_t caps;
+    const struct memory_region *map;
+    const struct dma_caps *caps;
+    const struct dma_periph_ep *eps;
+    uint32_t map_n = 0, eps_n = 0;
     if (!cfg) {
         soc_config_default(&dflt);
         cfg = &dflt;
     }
     s->config = *cfg;
-    if (s->config.rom_size_bytes > SOC_MAX_ROM_SIZE)
-        s->config.rom_size_bytes = SOC_MAX_ROM_SIZE;
-    if (s->config.sram_size_bytes > SOC_MAX_SRAM_SIZE)
-        s->config.sram_size_bytes = SOC_MAX_SRAM_SIZE;
+    /* ONE platform table (firmware/platform/): map, caps, FIFOs. */
+    map = vlab_memory_map(&map_n);
+    caps = vlab_dma_caps();
+    eps = vlab_dma_periph_eps(&eps_n);
+    s->regions = map;
+    s->n_regions = map_n;
 
     s->rom_backing = s->_rom_store;
     s->sram_backing = s->_sram_store;
-    soc_mem_init(&s->rom, SOC_ROM_BASE, s->config.rom_size_bytes, 1, "ROM",
+    /* Platform entries 0/1 are ROM/SRAM (sizes fit the static stores). */
+    soc_mem_init(&s->rom, map[0].base, map[0].size, 1, "ROM",
                  s->rom_backing);
-    soc_mem_init(&s->sram, SOC_SRAM_BASE, s->config.sram_size_bytes, 0,
-                 "SRAM", s->sram_backing);
-
-    s->regions[0].name = "rom";
-    s->regions[0].base = SOC_ROM_BASE;
-    s->regions[0].size = s->config.rom_size_bytes;
-    s->regions[0].type = SOC_RTYPE_ROM;
-    s->regions[1].name = "sram";
-    s->regions[1].base = SOC_SRAM_BASE;
-    s->regions[1].size = s->config.sram_size_bytes;
-    s->regions[1].type = SOC_RTYPE_SRAM;
-    s->regions[2].name = "uart";
-    s->regions[2].base = SOC_UART_BASE;
-    s->regions[2].size = SOC_REGION_SIZE;
-    s->regions[2].type = SOC_RTYPE_MMIO;
-    s->regions[3].name = "timer";
-    s->regions[3].base = SOC_TIMER_BASE;
-    s->regions[3].size = SOC_REGION_SIZE;
-    s->regions[3].type = SOC_RTYPE_MMIO;
-    s->regions[4].name = "dma";
-    s->regions[4].base = SOC_DMA_BASE;
-    s->regions[4].size = SOC_REGION_SIZE;
-    s->regions[4].type = SOC_RTYPE_MMIO;
-    s->regions[5].name = "intc";
-    s->regions[5].base = SOC_INTC_BASE;
-    s->regions[5].size = SOC_REGION_SIZE;
-    s->regions[5].type = SOC_RTYPE_MMIO;
-    s->regions[6].name = "perf";
-    s->regions[6].base = SOC_PERF_BASE;
-    s->regions[6].size = SOC_REGION_SIZE;
-    s->regions[6].type = SOC_RTYPE_MMIO;
+    soc_mem_init(&s->sram, map[1].base, map[1].size, 0, "SRAM",
+                 s->sram_backing);
 
     soc_perf_init(&s->perf);
     soc_intc_init(&s->intc, &s->perf);
     soc_uart_init(&s->uart, s->config.uart_latency_ticks, &s->perf,
                   &s->intc);
     soc_timer_init(&s->timer, &s->intc);
-    caps.alignment = 4;
-    caps.max_transfer = s->config.dma_max_transfer_bytes;
-    caps.supports_ram_to_ram = 1;
-    caps.supports_mem_to_periph = 1;
-    caps.supports_periph_to_mem = 1;
-    soc_dma_init(&s->dma, SOC_SRAM_BASE, s->config.sram_size_bytes,
-                 s->config.dma_latency_per_word_ticks, s->config.dma_burst,
-                 s->regions, 7, kVlabDmaPeriphs, VLAB_N_DMA_PERIPHS, &caps,
+    soc_dma_init(&s->dma, s->config.dma_latency_per_word_ticks,
+                 s->config.dma_burst, map, map_n, eps, eps_n, caps,
                  SOC_IRQ_DMA, &s->intc, &s->perf, soc_dma_reader_bridge,
                  soc_dma_writer_bridge, s);
-    soc_cpu_init(&s->cpu, SOC_ROM_BASE,
-                 SOC_SRAM_BASE + s->config.sram_size_bytes);
+    soc_cpu_init(&s->cpu, SOC_ROM_BASE, map[1].base + map[1].size);
     s->ticks = 0;
 }
 
@@ -121,31 +79,9 @@ void soc_reset_peripherals(soc_t *s) {
     soc_intc_reset(&s->intc);
 }
 
-static int soc_region_contains_addr(const soc_region_t *r, uint32_t addr,
-                                    uint32_t len) {
-    uint64_t end;
-    if (!r || len == 0) return 0;
-    end = (uint64_t)addr + (uint64_t)len;
-    if (end > 0x100000000ULL) return 0;
-    return addr >= r->base && end <= (uint64_t)r->base + (uint64_t)r->size;
-}
-
-/* Returns region index 0..6, or -1. */
-static int soc_find_region_idx(soc_t *s, uint32_t addr, uint32_t len) {
-    int i;
-    for (i = 0; i < 7; i++) {
-        if (soc_region_contains_addr(&s->regions[i], addr, len)) return i;
-    }
-    return -1;
-}
-
-/* Same widths as Python: word accesses for ROM/SRAM, byte presence for MMIO. */
+/* Decode lives in the bus module; SoC integration calls it here. */
 static int soc_route(soc_t *s, uint32_t addr) {
-    int idx = soc_find_region_idx(s, addr, 4);
-    if (idx == 0 || idx == 1) return idx;
-    idx = soc_find_region_idx(s, addr, 1);
-    if (idx >= 2) return idx;
-    return -1;
+    return soc_bus_route(s->regions, s->n_regions, addr);
 }
 
 int soc_read(soc_t *s, uint32_t addr, uint32_t *out) {
@@ -233,15 +169,15 @@ soc_boot_info_t soc_boot(soc_t *s, const uint32_t *rom_words,
     soc_boot_info_t info;
     s->ticks = 0;
     soc_cpu_reset(&s->cpu);
-    /* Re-point SP in case config changed (matches Python SoC boot). */
-    s->cpu.sram_top = SOC_SRAM_BASE + s->config.sram_size_bytes;
+    /* SP = top of SRAM from the platform map (entry 1). */
+    s->cpu.sram_top = s->regions[1].base + s->regions[1].size;
     s->cpu.sp = s->cpu.sram_top;
     soc_reset_peripherals(s);
     soc_perf_reset_counters(&s->perf);
     s->perf.enabled = 1;
     s->perf.ctrl = 0x1;
     if (rom_words && nwords > 0) {
-        memset(s->rom_backing, 0, s->config.rom_size_bytes);
+        memset(s->rom_backing, 0, s->regions[0].size);
         soc_mem_load_words(&s->rom, rom_words, nwords);
     }
     soc_mem_zero(&s->sram);

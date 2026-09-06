@@ -18,7 +18,7 @@ int main(void) {
     info = soc_boot(&s, rom_words, 2);
     assert(s.cpu.running == 1);
     assert(s.cpu.pc == SOC_ROM_BASE);
-    assert(s.cpu.sp == SOC_SRAM_BASE + cfg.sram_size_bytes);
+    assert(s.cpu.sp == SOC_SRAM_BASE + s.regions[1].size); /* SP = SRAM top */
     assert(info.boot_ticks == SOC_BOOT_TICKS && info.boot_ticks == 5);
     assert(s.ticks == SOC_BOOT_TICKS);
     assert(soc_read(&s, SOC_ROM_BASE, &v) == SOC_OK && v == 0x12345678U);

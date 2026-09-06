@@ -1,4 +1,9 @@
-/* VLAB platform configuration data. See platform_vlab.h. */
+/* VLAB platform configuration data. See platform_vlab.h.
+ *
+ * Data only (no driver calls): this file links into the model library so
+ * both the SoC and the drivers consume ONE table. Bring-up code lives in
+ * platform_init.c (firmware library) to keep static linking acyclic.
+ */
 #include "platform_vlab.h"
 
 #include "soc_regs.h"

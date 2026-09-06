@@ -8,6 +8,7 @@
 
 #include "driver_api.h"
 #include "host_bridge.h"
+#include "isr.h"
 #include "soc.h"
 #include "soc_regs.h"
 
@@ -88,6 +89,27 @@ int main(void) {
     soc_host_step(cfg.uart_latency_ticks);
     soc_read(soc_host_soc(), SOC_INTC_BASE + 0x04, &pending);
     assert(pending & 0x1);
+
+    /* Demo legs (ex-apps/isr_demo): system COMPLETE then ERROR+RECOVERY
+     * through submit -> hook/step -> dispatch -> recover. */
+    soc_host_boot();
+    dma_init();
+    soc_write(soc_host_soc(), SOC_INTC_BASE, 1U << VLAB_IRQ_DMA);
+    isr_register(VLAB_IRQ_DMA, dma_isr);
+    assert(dma_submit(SOC_SRAM_BASE, SOC_SRAM_BASE + 0x1000, 64, 1) ==
+           VLAB_DMA_OK);
+    vlab_test_dma_complete();
+    assert(isr_dispatch() == 1);
+    assert(dma_state() == DMA_S_COMPLETE && dma_is_complete());
+    dma_recover();
+    assert(dma_state() == DMA_S_IDLE);
+    assert(dma_submit(SOC_SRAM_BASE, SOC_SRAM_BASE + 0x1000, 64, 1) ==
+           VLAB_DMA_OK);
+    vlab_test_dma_error(1U);
+    assert(isr_dispatch() == 1);
+    assert(dma_state() == DMA_S_ERROR && dma_latched_error() == 1U);
+    dma_recover();
+    assert(dma_state() == DMA_S_IDLE);
 
     printf("FIRMWARE_LINK OK\n");
     return 0;

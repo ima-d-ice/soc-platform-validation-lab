@@ -1,6 +1,4 @@
-#include "soc_intc.h"
-
-#include "soc_perf.h"
+#include "soc.h"
 
 static const int kPriority[3] = {SOC_IRQ_TIMER, SOC_IRQ_DMA, SOC_IRQ_UART};
 

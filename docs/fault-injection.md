@@ -60,14 +60,13 @@ introduced — storms queue per the documented non-preemptive semantics.
 
 ## 4. Injection mechanism
 
-`soc_c/include/soc_faults.h` provides `soc_fault_injector_t` with
-`soc_fault_inject / soc_fault_clear / soc_fault_is_active` plus the
-`soc_recovery_tracker_t` state machine (`NORMAL → FAULT_DETECTED →
-RECOVERY → RECOVERED/UNRECOVERABLE`, illegal transitions rejected).
-Stuck faults (`dma-timeout`, `uart-stuck-busy`) set additive latches in
-the DMA/UART models (default off, so all other tests behave identically);
-all other faults are pure stimulus sequences through the existing
-MMIO/bus interface.
+Faults latch directly in the peripheral models (`fault_stuck_busy` flags
+in the UART/DMA structs, default off, so all other tests behave
+identically); tests set/clear the latch around explicit step windows and
+assert the frozen behavior plus recovery. Detection uses tick budgets
+(validation-side step counts); recovery reuses existing semantics only
+(two-step DMA clear, INTC ACK/CLEAR, `soc_reset_peripherals`). No
+framework, no new registers, no new IRQ mechanism.
 
 ## 5. Recovery model (validation level)
 
@@ -81,24 +80,21 @@ NORMAL → FAULT_DETECTED → RECOVERY → RECOVERED
 Each run records `current_state, fault_type, fault_time (measured),
 detection_time (measured), recovery_time (measured), final_state`, with
 latencies derived by subtraction. Recovery never invents hardware: DMA abort
-= `dma.reset()` + re-init + two-step clear; UART = unlatch + drain; storms =
-ordered ACK drain; resets = re-init per the existing reset contract. A fault
-may legally end UNRECOVERABLE only if the model defines no recovery path;
-all Phase-5 faults define one, and tests assert the defined outcome — never
-“recovery must always succeed” as a blanket rule.
+= `soc_reset_peripherals()` + re-init + two-step clear; UART = unlatch +
+drain; storms = ordered ACK drain; resets = re-init per the existing reset
+contract.
 
 ## 6. Measurement methodology
 
 ```bash
-ctest --test-dir soc_c/build -R soc_c_faults --output-on-failure
+ctest --test-dir build -R test_faults --output-on-failure
 ```
 
-The `soc_c_faults` CTest gates the same fault classes structurally:
+The `test_faults` CTest gates the fault classes behaviorally:
 latching `dma-timeout` freezes a BUSY transfer mid-countdown (still BUSY
 after 50 ticks, DONE after unlatch + step); `uart-stuck-busy` holds BUSY
 across 20 ticks and completes after unlatch; invalid DMA fails
-synchronously with the destination guard intact; the recovery tracker
-accepts the legal path and rejects illegal transitions. Timeout budgets
+synchronously with the destination guard intact. Timeout budgets
 are modeled parameters: DMA timeout 76 ticks (4x the healthy 64B
 transfer), UART stuck 20 ticks (4x UART latency).
 
@@ -151,14 +147,9 @@ unchanged at 5 ticks.
 
 * Stuck faults are single-latch freezes, not degraded-performance modes;
   there is no flaky/intermittent fault class.
-* No fault reaches UNRECOVERABLE in this matrix — the branch is
-  asserted in `soc_c_faults` (illegal transitions rejected) but has no
-  model-defined instance yet.
 * Detection budgets are chosen, not learned; a too-small budget would false-
-  positive on a slow healthy transfer (budgets are recorded per run so this
-  is auditable).
-* Reset faults are test-covered and harness-runnable but excluded from the
-  gate JSON to keep the specified CLI matrix exact.
+  positive on a slow healthy transfer (budgets appear as plain step counts
+  in the tests, so this is auditable).
 * As throughout: model ticks only — no silicon conclusions.
 
 ## 10. Virtual-model disclaimer

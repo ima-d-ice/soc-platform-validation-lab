@@ -32,6 +32,6 @@ performance oracle for any physical system.
    in this repo guarantees.
 9. **No Linux layer.** There is no kernel or userspace Linux driver
    model in this tree.
-10. **Single DMA channel.** No overlapped transfers. The `soc_c_cpu_vs_dma`
+10. **Single DMA channel.** No overlapped transfers. The `bench_dma`
     bench uses SRC @+0x0000 / DST @+0x8000 inside 64KB SRAM, capping
     single transfers at 16KB.

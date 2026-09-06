@@ -1,4 +1,4 @@
-#include "soc_memory.h"
+#include "soc.h"
 
 #include <string.h>
 

@@ -1,6 +1,4 @@
-#include "soc_timer.h"
-
-#include "soc_intc.h"
+#include "soc.h"
 
 void soc_timer_init(soc_timer_t *t, struct soc_intc_t *intc) {
     t->intc = intc;

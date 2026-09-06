@@ -7,14 +7,15 @@
 
 #include "driver_api.h"
 #include "hal.h"
+#include "host_bridge.h"
 #include "isr.h"
 #include "soc_regs.h"
 
 #define SRAM_BASE 0x10000000U
 
 static void setup(void) {
+    soc_host_boot(); /* live model, engine idle */
     dma_init();
-    hal_write_reg(VLAB_DMA_IRQ_CLEAR, 1U);
     intc_enable(1U << VLAB_IRQ_DMA);
     isr_register(VLAB_IRQ_DMA, dma_isr);
 }

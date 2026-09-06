@@ -1,10 +1,10 @@
 /* Hardware Abstraction Layer: single door for all register access.
  *
- * On silicon (non-VLAB_HOST_SIM builds) these are volatile pointer
- * dereferences, so the compiler can neither elide repeated reads (status
- * polling) nor reorder accesses across sequence points the way it could
- * with plain memory. On the host (VLAB_HOST_SIM, defined by CMake) they
- * route to the MMIO shim, but still pass through volatile-qualified
+ * On silicon these would be volatile pointer dereferences, so the compiler
+ * can neither elide repeated reads (status polling) nor reorder accesses
+ * across sequence points the way it could with plain memory (see
+ * docs/firmware-c.md for the intended silicon mapping). On the host they
+ * route into the live SoC model, but still pass through volatile-qualified
  * temporaries so driver code keeps the same read/write discipline and the
  * same compiler barriers as on hardware.
  *

@@ -40,23 +40,21 @@ void vlab_mmio_write(uint32_t addr, uint32_t val) {
     (void)soc_write(&g_soc, addr, val);
 }
 
-void vlab_mmio_consume_rx(void) {
-    /* Real model clears RX_VALID on RXDATA read; no-op here. */
-}
-
 void vlab_test_raise_irq(uint32_t line) {
     if (!g_inited) soc_host_init(NULL);
     soc_intc_raise(&g_soc.intc, (int)line);
 }
 
 void vlab_test_dma_complete(void) {
-    /* Drive engine to completion via stepping (no shortcut flags). */
+    /* Drive a BUSY engine to its terminal flag via stepping (no shortcut
+     * writes). Idle engine: nothing to drive, return immediately. */
     uint32_t st = 0;
     int i;
     if (!g_inited) return;
     for (i = 0; i < 100000; i++) {
         soc_read(&g_soc, SOC_DMA_BASE + 0x10, &st);
         if (st & (SOC_DMA_STATUS_DONE | SOC_DMA_STATUS_ERROR)) break;
+        if (!(st & SOC_DMA_STATUS_BUSY)) break;
         soc_step(&g_soc, 1);
     }
 }
@@ -67,4 +65,7 @@ void vlab_test_dma_error(uint32_t code) {
     g_soc.dma.done = 0;
     g_soc.dma.error = 1;
     g_soc.dma.err_code = code;
+    /* Real engines raise on ERROR iff IRQ was enabled at START. */
+    if (g_soc.dma.ctrl & SOC_DMA_CTRL_IRQ_ENABLE)
+        soc_intc_raise(&g_soc.intc, SOC_DMA_IRQ_LINE);
 }

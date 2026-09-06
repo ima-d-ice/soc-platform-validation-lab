@@ -1,13 +1,15 @@
 /* HAL unit tests: bit helpers + critical-section structure.
  *
- * Runs against the host MMIO shim; asserts real bit-manipulation behavior
- * through hal_read_reg/hal_write_reg. Each case resets the scratch
+ * Runs against the live model (booted once: BAUDDIV reset state, IRQ
+ * counter fresh); asserts real bit-manipulation behavior through
+ * hal_read_reg/hal_write_reg. Each case resets the scratch
  * register (UART_BAUDDIV) it uses.
  */
 #include <assert.h>
 #include <stdio.h>
 
 #include "hal.h"
+#include "host_bridge.h"
 #include "soc_regs.h"
 
 static void test_read_write_roundtrip(void) {
@@ -49,6 +51,7 @@ static void test_modify_reg(void) {
 }
 
 static void test_irq_disable_restore(void) {
+    hal_irq_restore(0U); /* fresh nesting state regardless of order */
     uint32_t s0 = hal_irq_disable();
     assert(s0 == 0U); /* IRQs start enabled on a fresh shim. */
     /* Nested disable keeps the masked state; restore is ordered. */
@@ -61,6 +64,7 @@ static void test_irq_disable_restore(void) {
 }
 
 int main(void) {
+    soc_host_boot(); /* live model, reset values */
     test_read_write_roundtrip();
     test_set_bits();
     test_clear_bits();

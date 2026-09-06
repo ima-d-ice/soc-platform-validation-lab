@@ -69,6 +69,20 @@ static uint32_t errcode(soc_t *s) {
     return v;
 }
 
+/* Fresh SoC per burst cell; returns transfer ticks to DONE/ERROR. */
+static int measure_ticks(uint32_t burst, uint32_t nbytes) {
+    soc_t m;
+    soc_config_t cfg;
+    ctx_t q;
+    soc_config_default(&cfg);
+    cfg.dma_burst = burst;
+    soc_init(&m, &cfg);
+    soc_boot(&m, NULL, 0);
+    q.s = &m;
+    start(&m, SOC_SRAM_BASE, SOC_SRAM_BASE + 0x8000, nbytes, 0x1);
+    return soc_run_until(&m, pred_term, &q, 100000);
+}
+
 int main(void) {
     soc_t s;
     ctx_t pc;
@@ -183,6 +197,15 @@ int main(void) {
     assert(soc_write(&s, IRQ_CLEAR, 1) == SOC_OK);
     assert(soc_write(&s, INTC_CLEAR, IRQ_DMA) == SOC_OK);
     assert(status(&s) == 0 && errcode(&s) == 0);
+
+    /* Burst timing: ticks = words*1 + (bursts-1), bursts=ceil(words/burst).
+     * Same formula the cpu_vs_dma bench sweeps; pinned here as golden
+     * values (16KB: 8191 at burst 1 down to 4351 at burst 16). */
+    assert(measure_ticks(1, 64) == 31);
+    assert(measure_ticks(4, 64) == 19);
+    assert(measure_ticks(16, 16384) == 4351);
+    assert(measure_ticks(1, 16384) == 8191);
+    assert(measure_ticks(4, 1024) == measure_ticks(4, 1024)); /* deterministic */
 
     printf("ENDPOINTS OK\n");
     return 0;
