@@ -14,6 +14,13 @@ framework, boot sequencing, an event-driven demo app, and CTest unit tests
 * **Driver logic**: validation ordering (BUSY→LEN→ALIGN→ADDR, mirroring the
   `soc_c` model), bit composition, W1C handling, error codes,
   bounded poll loops with timeout returns.
+* **DMA is an endpoint-to-endpoint engine**: the driver identifies source /
+  destination kinds (MEM vs listed peripheral FIFOs), checks roles
+  (uart-tx is sink-only, uart-rx source-only) and then the configured
+  direction caps. Invalid API use (LEN/ALIGN/ADDR) is distinct from
+  platform refusal (UNSUPPORTED: incapable endpoint, wrong role,
+  disallowed direction, over max). VLAB's three enabled directions are one
+  platform choice (`firmware/platforms/vlab/`), never a universal rule.
 * **ISR discipline**: vector table + registration (`isr/isr.c`), volatile
   ISR/main shared flags, critical sections around submit/recover state
   transitions, ACK-then-clear ordering inside the ISR, bounded dispatch so
@@ -41,8 +48,12 @@ framework, boot sequencing, an event-driven demo app, and CTest unit tests
 * **Engine stand-ins (unit tests only)**: the shim has no ticking engine,
   so unit tests and the demo drive completion/error via `vlab_test_*`
   hooks (documented as test-only in `driver_api.h`). System tests drive
-  the real `soc_c` engine instead. Timeout waits are bounded poll loops;
+  the real   `soc_c` engine instead. Timeout waits are bounded poll loops;
   on silicon the bound would be a timer.
+* **Peripheral streams are model FIFOs**: DMA RAM→uart-tx appends to a TX
+  stream (looped back into the RX stream), DMA uart-rx→RAM drains it;
+  CPU single-byte loopback semantics are unchanged. FIFO depth equals the
+  max transfer; short RX reads zero-pad, so tests pre-fill exact lengths.
 * **No silicon timing**: C tests assert logic and sequencing, never cycles.
 
 ## Interview map

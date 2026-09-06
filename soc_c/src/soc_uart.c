@@ -1,5 +1,7 @@
 #include "soc_uart.h"
 
+#include <string.h>
+
 #include "soc_intc.h"
 #include "soc_perf.h"
 
@@ -15,6 +17,8 @@ void soc_uart_init(soc_uart_t *u, uint32_t latency_ticks,
     u->busy = 0;
     u->rx_valid = 0;
     u->fault_stuck_busy = 0;
+    u->dma_tx_len = 0;
+    u->dma_rx_len = 0;
 }
 
 void soc_uart_reset(soc_uart_t *u) {
@@ -25,6 +29,8 @@ void soc_uart_reset(soc_uart_t *u) {
     u->busy = 0;
     u->rx_valid = 0;
     u->fault_stuck_busy = 0;
+    u->dma_tx_len = 0;
+    u->dma_rx_len = 0;
 }
 
 static uint32_t soc_uart_status(soc_uart_t *u) {
@@ -75,9 +81,49 @@ void soc_uart_step(soc_uart_t *u) {
         if (u->fault_stuck_busy) return;
         u->busy--;
         if (u->busy == 0) {
+            uint8_t b;
             u->rxdata = u->txdata;
             u->rx_valid = 1;
+            /* Loopback is also visible to the DMA streams (tx record +
+             * rx stream); the helper appends to both exactly once. */
+            b = (uint8_t)(u->txdata & 0xFFU);
+            soc_uart_dma_tx_append(u, &b, 1);
             if (u->intc) soc_intc_raise(u->intc, SOC_UART_IRQ_LINE);
         }
     }
+}
+
+void soc_uart_dma_tx_append(soc_uart_t *u, const uint8_t *payload,
+                            uint32_t len) {
+    uint32_t space, n;
+    if (!payload || len == 0) return;
+    space = (u->dma_tx_len < SOC_UART_DMA_FIFO_SIZE)
+                ? SOC_UART_DMA_FIFO_SIZE - u->dma_tx_len
+                : 0;
+    n = (len < space) ? len : space;
+    if (n > 0) {
+        memcpy(&u->dma_tx_fifo[u->dma_tx_len], payload, n);
+        u->dma_tx_len += n;
+    }
+    /* Loopback: sunk bytes reappear on the RX stream. */
+    space = (u->dma_rx_len < SOC_UART_DMA_FIFO_SIZE)
+                ? SOC_UART_DMA_FIFO_SIZE - u->dma_rx_len
+                : 0;
+    n = (len < space) ? len : space;
+    if (n > 0) {
+        memcpy(&u->dma_rx_fifo[u->dma_rx_len], payload, n);
+        u->dma_rx_len += n;
+    }
+}
+
+void soc_uart_dma_rx_drain(soc_uart_t *u, uint8_t *out, uint32_t len) {
+    uint32_t n;
+    if (!out || len == 0) return;
+    n = (len < u->dma_rx_len) ? len : u->dma_rx_len;
+    if (n > 0) {
+        memcpy(out, u->dma_rx_fifo, n);
+        memmove(u->dma_rx_fifo, &u->dma_rx_fifo[n], u->dma_rx_len - n);
+        u->dma_rx_len -= n;
+    }
+    if (n < len) memset(&out[n], 0, len - n); /* short read zero-pads */
 }

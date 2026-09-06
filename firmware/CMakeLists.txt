@@ -61,5 +61,6 @@ vlab_test(dma_caps_unit tests/unit/test_dma_caps.c)
 # Integration: driver + ISR + platform wiring.
 vlab_test(isr_unit tests/integration/test_isr.c)
 vlab_test(dma_platform_integration tests/integration/test_dma_platform.c)
+vlab_test(dma_endpoints tests/integration/test_dma_endpoints.c)
 # Fault: invalid use, error latch, recovery.
 vlab_test(dma_faults tests/fault/test_dma_faults.c)

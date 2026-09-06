@@ -49,6 +49,37 @@ int main(void) {
         dma_clear();
     }
 
+    /* DMA peripheral round-trip via driver API: RAM -> uart-tx, then
+     * uart-rx -> RAM. Validates through the driver, moves through the
+     * model FIFOs, byte-compares at the end. */
+    {
+        soc_t *s = soc_host_soc();
+        uint32_t i;
+        soc_host_boot();
+        dma_init();
+        for (i = 0; i < 16; i++)
+            soc_sram_write_word(s, SOC_SRAM_BASE + 0x4000 + i * 4,
+                                0xC3000000U | i);
+        assert(dma_start(SOC_SRAM_BASE + 0x4000, VLAB_UART_TXDATA, 64, 0) ==
+               VLAB_DMA_OK);
+        soc_host_step(100);
+        assert(dma_status() & VLAB_DMA_STATUS_DONE);
+        dma_clear();
+        assert(dma_start(VLAB_UART_RXDATA, SOC_SRAM_BASE + 0x5000, 64, 0) ==
+               VLAB_DMA_OK);
+        soc_host_step(100);
+        assert(dma_status() & VLAB_DMA_STATUS_DONE);
+        for (i = 0; i < 16; i++) {
+            uint32_t v = 0;
+            soc_sram_read_word(s, SOC_SRAM_BASE + 0x5000 + i * 4, &v);
+            assert(v == (0xC3000000U | i));
+        }
+        dma_clear();
+        /* Mapped-but-incapable peripheral stays UNSUPPORTED here too. */
+        assert(dma_start(SOC_SRAM_BASE, VLAB_TIMER_BASE, 64, 0) ==
+               VLAB_DMA_ERR_UNSUPPORTED);
+    }
+
     /* IRQ path: UART completion raises line 0. */
     soc_host_boot();
     assert(uart_init(0) == VLAB_UART_OK);

@@ -63,6 +63,19 @@ typedef struct {
     int supports_periph_to_mem;
 } soc_dma_caps_t;
 
+/* DMA-capable peripheral FIFO (mirrors firmware struct dma_periph_ep).
+ * Anchored at one FIFO register address with allowed roles; length is
+ * validated separately. A mapped MMIO address with no entry is valid but
+ * NOT DMA-capable. NULL table = legacy: any mapped MMIO is a candidate. */
+#define SOC_DMA_EP_SRC (1U << 0)
+#define SOC_DMA_EP_DST (1U << 1)
+
+typedef struct {
+    const char *name;
+    uint32_t fifo_addr;
+    uint32_t roles; /* SOC_DMA_EP_SRC and/or SOC_DMA_EP_DST */
+} soc_dma_periph_ep_t;
+
 typedef struct soc_dma_t soc_dma_t;
 /* SRAM bridge without import cycles. Return SOC_OK or SOC_ERR_BUS. */
 typedef int (*soc_dma_reader_t)(void *ctx, uint32_t addr, uint32_t len,
@@ -77,6 +90,8 @@ struct soc_dma_t {
     uint32_t burst;
     const soc_region_t *regions;
     uint32_t n_regions;
+    const soc_dma_periph_ep_t *periph_eps;
+    uint32_t n_periph_eps;
     soc_dma_caps_t caps;
     int irq_line;
     struct soc_intc_t *intc;
@@ -100,10 +115,11 @@ struct soc_dma_t {
 void soc_dma_init(soc_dma_t *d, uint32_t sram_base, uint32_t sram_size,
                   uint32_t latency_per_word, uint32_t burst,
                   const soc_region_t *regions, uint32_t n_regions,
-                  const soc_dma_caps_t *caps, int irq_line,
-                  struct soc_intc_t *intc, struct soc_perf_t *perf,
-                  soc_dma_reader_t reader, soc_dma_writer_t writer,
-                  void *mem_ctx);
+                  const soc_dma_periph_ep_t *periph_eps,
+                  uint32_t n_periph_eps, const soc_dma_caps_t *caps,
+                  int irq_line, struct soc_intc_t *intc,
+                  struct soc_perf_t *perf, soc_dma_reader_t reader,
+                  soc_dma_writer_t writer, void *mem_ctx);
 void soc_dma_reset(soc_dma_t *d);
 int soc_dma_read(soc_dma_t *d, uint32_t offset, uint32_t *out);
 int soc_dma_write(soc_dma_t *d, uint32_t offset, uint32_t value);

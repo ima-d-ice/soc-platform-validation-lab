@@ -26,14 +26,38 @@ static const soc_region_t *soc_find_region(const soc_region_t *table,
     return NULL;
 }
 
-/* Endpoint classes: 0=MEM, 1=PERIPHERAL, 2=DEVICE, -1=unmapped */
+/* Endpoint classes: 0=MEM, 1=PERIPHERAL, 2=DEVICE, -1=unmapped,
+ * -2=mapped but not DMA-capable */
 static int soc_endpoint_type(const soc_region_t *regions, uint32_t n,
+                             const soc_dma_periph_ep_t *eps, uint32_t n_eps,
                              uint32_t addr, uint32_t len) {
-    const soc_region_t *r = soc_find_region(regions, n, addr, len);
+    const soc_region_t *r;
+    uint32_t i;
+    if (eps != NULL || n_eps > 0) {
+        /* Strict platform: MEM or a listed FIFO, nothing else. */
+        for (i = 0; i < n_eps; i++) {
+            if (eps && eps[i].fifo_addr == addr) return 1;
+        }
+        r = soc_find_region(regions, n, addr, len);
+        if (!r) return -1;
+        if (r->type == SOC_RTYPE_SRAM || r->type == SOC_RTYPE_DRAM) return 0;
+        return -2;
+    }
+    r = soc_find_region(regions, n, addr, len);
     if (!r) return -1;
     if (r->type == SOC_RTYPE_SRAM || r->type == SOC_RTYPE_DRAM) return 0;
     if (r->type == SOC_RTYPE_MMIO || r->type == SOC_RTYPE_PERIPHERAL) return 1;
     return 2;
+}
+
+static const soc_dma_periph_ep_t *soc_periph_find(
+    const soc_dma_periph_ep_t *eps, uint32_t n, uint32_t addr) {
+    uint32_t i;
+    if (!eps) return NULL;
+    for (i = 0; i < n; i++) {
+        if (eps[i].fifo_addr == addr) return &eps[i];
+    }
+    return NULL;
 }
 
 static int soc_direction_supported(const soc_dma_caps_t *caps, int src,
@@ -49,16 +73,19 @@ static int soc_direction_supported(const soc_dma_caps_t *caps, int src,
 void soc_dma_init(soc_dma_t *d, uint32_t sram_base, uint32_t sram_size,
                   uint32_t latency_per_word, uint32_t burst,
                   const soc_region_t *regions, uint32_t n_regions,
-                  const soc_dma_caps_t *caps, int irq_line,
-                  struct soc_intc_t *intc, struct soc_perf_t *perf,
-                  soc_dma_reader_t reader, soc_dma_writer_t writer,
-                  void *mem_ctx) {
+                  const soc_dma_periph_ep_t *periph_eps,
+                  uint32_t n_periph_eps, const soc_dma_caps_t *caps,
+                  int irq_line, struct soc_intc_t *intc,
+                  struct soc_perf_t *perf, soc_dma_reader_t reader,
+                  soc_dma_writer_t writer, void *mem_ctx) {
     d->sram_base = sram_base;
     d->sram_size = sram_size;
     d->latency_per_word = latency_per_word > 0 ? latency_per_word : 1;
     d->burst = burst > 0 ? burst : 1;
     d->regions = regions;
     d->n_regions = n_regions;
+    d->periph_eps = periph_eps;
+    d->n_periph_eps = (periph_eps != NULL) ? n_periph_eps : 0;
     if (caps)
         d->caps = *caps;
     else {
@@ -155,11 +182,28 @@ static void soc_dma_start(soc_dma_t *d, int irq_enable) {
         soc_dma_fail(d, SOC_DMA_ERR_UNSUPPORTED);
         return;
     }
-    src_type = soc_endpoint_type(d->regions, d->n_regions, d->src, d->length);
-    dst_type = soc_endpoint_type(d->regions, d->n_regions, d->dst, d->length);
+    src_type = soc_endpoint_type(d->regions, d->n_regions, d->periph_eps,
+                                 d->n_periph_eps, d->src, d->length);
+    dst_type = soc_endpoint_type(d->regions, d->n_regions, d->periph_eps,
+                                 d->n_periph_eps, d->dst, d->length);
     if (src_type < 0 || dst_type < 0) {
-        soc_dma_fail(d, SOC_DMA_ERR_ADDR);
+        /* -1 unmapped/overflowing -> ADDR; -2 mapped-but-incapable. */
+        soc_dma_fail(d, (src_type == -1 || dst_type == -1)
+                            ? SOC_DMA_ERR_ADDR
+                            : SOC_DMA_ERR_UNSUPPORTED);
         return;
+    }
+    if (d->periph_eps != NULL || d->n_periph_eps > 0) {
+        /* Strict platform: FIFOs additionally need the right role. */
+        const soc_dma_periph_ep_t *s_ep =
+            soc_periph_find(d->periph_eps, d->n_periph_eps, d->src);
+        const soc_dma_periph_ep_t *d_ep =
+            soc_periph_find(d->periph_eps, d->n_periph_eps, d->dst);
+        if ((s_ep && !(s_ep->roles & SOC_DMA_EP_SRC)) ||
+            (d_ep && !(d_ep->roles & SOC_DMA_EP_DST))) {
+            soc_dma_fail(d, SOC_DMA_ERR_UNSUPPORTED);
+            return;
+        }
     }
     if (!soc_direction_supported(&d->caps, src_type, dst_type)) {
         soc_dma_fail(d, SOC_DMA_ERR_UNSUPPORTED);

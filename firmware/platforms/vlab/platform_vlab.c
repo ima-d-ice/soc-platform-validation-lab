@@ -17,10 +17,17 @@ static const struct dma_caps s_vlab_dma_caps = {
     4U,    /* alignment */
     16384U, /* max_transfer */
     true,  /* supports_ram_to_ram */
-    false, /* supports_mem_to_periph */
-    false, /* supports_periph_to_mem */
+    true,  /* supports_mem_to_periph */
+    true,  /* supports_periph_to_mem */
     true,  /* supports_interrupts */
     false  /* supports_cancel */
+};
+
+/* DMA-capable FIFOs anchor at existing FIFO registers (no map change):
+ * TXDATA accepts streamed bytes, RXDATA sources them. */
+static const struct dma_periph_ep s_vlab_dma_periphs[] = {
+    {"uart-tx", VLAB_UART_TXDATA, DMA_EP_DST},
+    {"uart-rx", VLAB_UART_RXDATA, DMA_EP_SRC},
 };
 
 static const struct irq_map s_vlab_irq_map = {
@@ -33,5 +40,12 @@ const struct memory_region *vlab_memory_map(uint32_t *n) {
 }
 
 const struct dma_caps *vlab_dma_caps(void) { return &s_vlab_dma_caps; }
+
+const struct dma_periph_ep *vlab_dma_periph_eps(uint32_t *n) {
+    if (n)
+        *n = (uint32_t)(sizeof(s_vlab_dma_periphs) /
+                        sizeof(s_vlab_dma_periphs[0]));
+    return s_vlab_dma_periphs;
+}
 
 const struct irq_map *vlab_irq_map(void) { return &s_vlab_irq_map; }

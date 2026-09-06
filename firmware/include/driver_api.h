@@ -42,12 +42,15 @@ void intc_clear(uint32_t irq);
 #define VLAB_DMA_ERR_BUSY (-4)
 #define VLAB_DMA_ERR_UNSUPPORTED (-5)
 
-/* DMA configuration: platform region table + capabilities. dma_init()
- * loads the VLAB platform defaults (call after boot, before use);
- * dma_configure() overrides with another platform's tables. */
+/* DMA configuration: platform region table + capabilities + DMA-capable
+ * peripheral endpoints. dma_init() loads the VLAB platform defaults (call
+ * after boot, before use); dma_configure() overrides the map+caps and
+ * dma_configure_periph() overrides the peripheral table (NULL, 0 restores
+ * legacy region-based classification). */
 void dma_init(void);
 void dma_configure(const struct memory_region *map, uint32_t n,
                    const struct dma_caps *caps);
+void dma_configure_periph(const struct dma_periph_ep *eps, uint32_t n);
 int dma_start(uint32_t src, uint32_t dst, uint32_t len, int irq_enable);
 uint32_t dma_status(void);
 void dma_clear(void);

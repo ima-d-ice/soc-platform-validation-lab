@@ -37,8 +37,13 @@ static void test_invalid_src_rejected_without_start(void) {
 
 static void test_unsupported_platform_rejected(void) {
     setup();
-    /* Mapped MMIO endpoint, VLAB caps forbid peripheral direction. */
-    assert(dma_submit(SRAM_BASE, VLAB_UART_BASE, 64, 1) ==
+    /* Mapped MMIO endpoint with no DMA-capable FIFO (TIMER): valid
+     * address, unsupported DMA capability -> UNSUPPORTED, never ADDR. */
+    assert(dma_submit(SRAM_BASE, VLAB_TIMER_BASE, 64, 1) ==
+           VLAB_DMA_ERR_UNSUPPORTED);
+    assert(dma_state() == DMA_S_IDLE);
+    /* Wrong FIFO role (uart-rx is source-only): likewise UNSUPPORTED. */
+    assert(dma_submit(SRAM_BASE, VLAB_UART_RXDATA, 64, 1) ==
            VLAB_DMA_ERR_UNSUPPORTED);
     assert(dma_state() == DMA_S_IDLE);
     /* Over max transfer: likewise platform, not API. */

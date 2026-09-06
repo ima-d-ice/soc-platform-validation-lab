@@ -16,7 +16,8 @@ Every concept in this repository carries exactly one of these labels:
 soc_c/tests/*, soc_c/bench/*  (harness: builds SoCs, drives scenarios)
         |
 firmware/platforms/vlab/  (PLATFORM CONFIGURATION: memory map, DMA caps,
-  IRQ map — the single construction site for firmware data)
+  DMA-capable peripheral FIFOs, IRQ map — the single construction site
+  for firmware data)
         |
 soc_c/src/*, firmware/hal, firmware/isr
   (GENERAL CONCEPT mechanisms: decode/step/boot, regions, caps-checked
@@ -34,11 +35,11 @@ Per component:
 | `soc_bus.h` `SOC_ERR_BUS` | returned everywhere | bus fault signal | ✅ | — |
 | `soc_memory` regions | SoC decode, DMA validation | map-as-data + range math | ✅ helpers | table contents |
 | `soc.c` SoC | tests, benches | integration, tick, boot | flow | map/caps/IRQ (VLAB bases) |
-| `soc_dma` + caps | SoC step, benches | burst engine | lifecycle, burst math, 2-step clear | caps values, IRQ line |
+| `soc_dma` + caps + periph FIFOs | SoC step, benches | burst engine, endpoint/role validation | lifecycle, burst math, 2-step clear | caps values, uart-tx/rx FIFO table, IRQ line |
 | `soc_intc` | peripherals | coalescing controller | ack/active semantics | lines 0/1/2 + order |
 | `soc_faults` | fault tests | latch injector + recovery machine | ✅ | budgets live in callers |
 | `firmware/hal/` | all drivers/ISR | access primitives + backends | ✅ interface | backend choice (host vs silicon) |
-| `firmware/drivers/dma/` | apps, tests | validation + lifecycle + ISR | order, lifecycle, codes | caps/map from `platforms/vlab/` |
+| `firmware/drivers/dma/` | apps, tests | validation + lifecycle + ISR | endpoint/role/direction order, lifecycle, codes | caps/map/periph-FIFOs from `platforms/vlab/` |
 | `firmware/isr/` | apps, tests | generic dispatch | ✅ dispatcher | line count + numbers from platform |
 | `firmware/platforms/vlab/` | dma driver | VLAB data | table pattern | all values |
 | `soc_c/host_bridge` | firmware_link test | firmware-on-model binding | shim pattern | VLAB addresses |
@@ -61,7 +62,7 @@ Validation soc_c/tests/ + firmware/tests/  determinism, golden numbers
 ## Additive errata (behavior-preserving extensions, not spec breaks)
 
 - DMA error code 4 (`ERR_UNSUPPORTED` / `VLAB_DMA_ERR_UNSUPPORTED`):
-  mapped-but-unsupported endpoint, direction, or over-max length.
-  Codes 0–3 keep frozen meanings.
+  mapped-but-incapable endpoint, wrong FIFO role, disallowed direction,
+  or over-max length. Codes 0–3 keep frozen meanings.
 - `isr_configure(n)`: platforms with fewer live lines than the
   controller; ACK side effects still follow the controller contract.

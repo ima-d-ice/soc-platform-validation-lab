@@ -22,6 +22,14 @@
 #define SOC_UART_ERR_DISABLED (-1)
 #define SOC_UART_IRQ_LINE 0
 
+/* DMA-visible stream FIFOs (model depth, not registers). uart-tx is the
+ * DMA sink (RAM -> Peripheral), uart-rx the DMA source (Peripheral ->
+ * RAM). Capacity equals the default max transfer; validated transfers
+ * always fit. CPU single-byte loopback (_txdata/_rxdata/_rx_valid) is
+ * unchanged; completions also append to the stream FIFOs so both paths
+ * observe looped-back bytes. */
+#define SOC_UART_DMA_FIFO_SIZE 16384U
+
 struct soc_perf_t;
 struct soc_intc_t;
 
@@ -36,6 +44,10 @@ typedef struct soc_uart_t {
     int32_t busy;
     int rx_valid;
     int fault_stuck_busy;
+    uint8_t dma_tx_fifo[SOC_UART_DMA_FIFO_SIZE];
+    uint32_t dma_tx_len;
+    uint8_t dma_rx_fifo[SOC_UART_DMA_FIFO_SIZE];
+    uint32_t dma_rx_len;
 } soc_uart_t;
 
 void soc_uart_init(soc_uart_t *u, uint32_t latency_ticks,
@@ -45,5 +57,12 @@ int soc_uart_read(soc_uart_t *u, uint32_t offset, uint32_t *out);
 /* Returns 0 ok, SOC_UART_ERR_DISABLED if TX while disabled. */
 int soc_uart_write(soc_uart_t *u, uint32_t offset, uint32_t value);
 void soc_uart_step(soc_uart_t *u);
+
+/* DMA stream FIFO helpers. Appends saturate at capacity (validated
+ * transfers always fit; only un-drained loopback accumulation saturates).
+ * Drain of a short FIFO zero-pads; tests must pre-fill exact lengths. */
+void soc_uart_dma_tx_append(soc_uart_t *u, const uint8_t *payload,
+                            uint32_t len);
+void soc_uart_dma_rx_drain(soc_uart_t *u, uint8_t *out, uint32_t len);
 
 #endif /* SOC_C_UART_H */

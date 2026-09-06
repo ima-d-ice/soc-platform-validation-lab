@@ -13,15 +13,35 @@ void soc_config_default(soc_config_t *cfg) {
     cfg->timer_tick_ticks = 1;
 }
 
+/* VLAB DMA-capable peripheral FIFOs (mirrors firmware
+ * platform_vlab.c): UART TX sink + UART RX source, anchored at the
+ * existing FIFO registers (no map change). */
+static const soc_dma_periph_ep_t kVlabDmaPeriphs[] = {
+    {"uart-tx", SOC_UART_BASE + SOC_UART_TXDATA_OFF, SOC_DMA_EP_DST},
+    {"uart-rx", SOC_UART_BASE + SOC_UART_RXDATA_OFF, SOC_DMA_EP_SRC},
+};
+#define VLAB_N_DMA_PERIPHS \
+    ((uint32_t)(sizeof(kVlabDmaPeriphs) / sizeof(kVlabDmaPeriphs[0])))
+
 static int soc_dma_reader_bridge(void *ctx, uint32_t addr, uint32_t len,
                                  uint8_t *out) {
     soc_t *s = (soc_t *)ctx;
+    if (addr == SOC_UART_BASE + SOC_UART_RXDATA_OFF) {
+        /* Peripheral source: drain the RX stream (short reads zero-pad). */
+        soc_uart_dma_rx_drain(&s->uart, out, len);
+        return SOC_OK;
+    }
     return soc_mem_read_bytes(&s->sram, addr, len, out);
 }
 
 static int soc_dma_writer_bridge(void *ctx, uint32_t addr,
                                  const uint8_t *payload, uint32_t len) {
     soc_t *s = (soc_t *)ctx;
+    if (addr == SOC_UART_BASE + SOC_UART_TXDATA_OFF) {
+        /* Peripheral sink: stream into the TX FIFO (loopback feeds RX). */
+        soc_uart_dma_tx_append(&s->uart, payload, len);
+        return SOC_OK;
+    }
     return soc_mem_write_bytes(&s->sram, addr, payload, len);
 }
 
@@ -82,12 +102,13 @@ void soc_init(soc_t *s, const soc_config_t *cfg) {
     caps.alignment = 4;
     caps.max_transfer = s->config.dma_max_transfer_bytes;
     caps.supports_ram_to_ram = 1;
-    caps.supports_mem_to_periph = 0;
-    caps.supports_periph_to_mem = 0;
+    caps.supports_mem_to_periph = 1;
+    caps.supports_periph_to_mem = 1;
     soc_dma_init(&s->dma, SOC_SRAM_BASE, s->config.sram_size_bytes,
                  s->config.dma_latency_per_word_ticks, s->config.dma_burst,
-                 s->regions, 7, &caps, SOC_IRQ_DMA, &s->intc, &s->perf,
-                 soc_dma_reader_bridge, soc_dma_writer_bridge, s);
+                 s->regions, 7, kVlabDmaPeriphs, VLAB_N_DMA_PERIPHS, &caps,
+                 SOC_IRQ_DMA, &s->intc, &s->perf, soc_dma_reader_bridge,
+                 soc_dma_writer_bridge, s);
     soc_cpu_init(&s->cpu, SOC_ROM_BASE,
                  SOC_SRAM_BASE + s->config.sram_size_bytes);
     s->ticks = 0;

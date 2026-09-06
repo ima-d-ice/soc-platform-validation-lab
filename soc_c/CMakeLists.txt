@@ -37,6 +37,7 @@ vlab_soc_test(soc_c_intc tests/test_intc.c)
 vlab_soc_test(soc_c_timer_uart tests/test_timer_uart.c)
 vlab_soc_test(soc_c_faults tests/test_faults.c)
 vlab_soc_test(soc_c_regions tests/test_regions.c)
+vlab_soc_test(soc_c_endpoints tests/test_endpoints.c)
 
 # Firmware+model link: real drivers on the real model (no mmio.c shim).
 add_executable(soc_c_firmware_link tests/test_firmware_link.c
